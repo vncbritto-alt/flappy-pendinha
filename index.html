@@ -3,209 +3,229 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Flappy Vinicius — Pendinha Games</title>
+<title>Flappy Pendinha — Teste</title>
 <style>
-  :root{font-family:Inter,system-ui,Arial,Helvetica,sans-serif}
-  html,body{height:100%;margin:0;background:#70c5ce;display:flex;align-items:center;justify-content:center}
-  .wrap{width:100%;max-width:420px;padding:20px;box-sizing:border-box}
-  canvas{display:block;width:100%;height:auto;background:#70c5ce;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.15)}
-  .ui{position:relative;margin-top:12px;display:flex;justify-content:space-between;align-items:center;color:#073b3b}
-  .score{font-weight:700;font-size:18px}
-  .small{font-size:13px;color:#053033}
-  .hint{font-size:13px;color:#075a57;margin-top:8px}
+  html,body{height:100%;margin:0;background:#70c5ce;display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,sans-serif}
+  .wrap{width:100%;max-width:420px;padding:14px;box-sizing:border-box}
+  canvas{width:100%;height:auto;border-radius:8px;display:block;background:#70c5ce;border:0;box-shadow:0 8px 24px rgba(0,0,0,0.15)}
+  .info{display:flex;justify-content:space-between;color:#042; margin-top:8px; font-weight:600}
+  .hint{font-size:13px;color:#033; text-align:center; margin-top:8px}
 </style>
 </head>
 <body>
   <div class="wrap">
-    <canvas id="game" width="320" height="480"></canvas>
-    <div class="ui">
-      <div class="score">Pontos: <span id="points">0</span></div>
-      <div class="small">Melhor: <span id="best">0</span></div>
-    </div>
-    <div style="height:8px"></div>
-    <div class="hint">Toque / clique / espaço para pular</div>
+    <canvas id="game" width="320" height="480" aria-label="Flappy Pendinha"></canvas>
+    <div class="info"><div>Pontos: <span id="points">0</span></div><div>Melhor: <span id="best">0</span></div></div>
+    <div class="hint">Clique/Toque/Espaço → pular. Clique quando parado para iniciar/reiniciar.</div>
   </div>
 
 <script>
-(() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+/* Flappy simples, testado para abrir localmente (file://).
+   Se não rodar, abra o console (F12) e me diga a mensagem. */
 
-  function resizeCanvas() {
-    const maxW = Math.min(window.innerWidth - 40, 420);
-    canvas.style.width = maxW + 'px';
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+(function(){
+  try {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
 
-  const W = canvas.width, H = canvas.height;
-  let bird = { x: 70, y: H/2, r: 14, vy: 0, rot: 0 };
-  let gravity = 0.35, jump = -7.5;
-  let pipes = [];
-  let frame = 0;
-  let speed = 2.2;
-  let gap = 130;
-  let running = false;
-  let score = 0;
-  let best = parseInt(localStorage.getItem('flappy_best') || '0', 10);
+    // Internal resolution (fixed)
+    const W = canvas.width = 320;
+    const H = canvas.height = 480;
 
-  const elScore = document.getElementById('points');
-  const elBest = document.getElementById('best');
-  elBest.textContent = best;
+    // Responsive visual width
+    function applyResize(){ const maxW = Math.min(window.innerWidth - 36, 420); canvas.style.width = maxW + 'px'; }
+    window.addEventListener('resize', applyResize);
+    applyResize();
 
-  function rand(min, max){ return Math.random()*(max-min)+min }
+    // Game state
+    let bird = { x: 70, y: H/2, r: 12, vy: 0 };
+    let gravity = 0.34, jump = -7.2;
+    let pipes = []; // {x, top, bottom, passed}
+    let gap = 120;
+    let speed = 2.2;
+    let frame = 0;
+    let running = false;
+    let score = 0;
+    let best = parseInt(localStorage.getItem('flappy_best')||'0',10);
 
-  function spawnPipe(){
-    const top = rand(40, H/2 - 20);
-    const bottom = top + gap;
-    pipes.push({ x: W + 10, top, bottom, passed:false });
-  }
+    // DOM refs
+    const elPoints = document.getElementById('points');
+    const elBest = document.getElementById('best');
+    elBest.textContent = best;
 
-  function circleRect(cx, cy, r, rx, ry, rw, rh){
-    const closestX = Math.max(rx, Math.min(cx, rx+rw));
-    const closestY = Math.max(ry, Math.min(cy, ry+rh));
-    const dx = cx - closestX;
-    const dy = cy - closestY;
-    return (dx*dx + dy*dy) < r*r;
-  }
+    function rand(a,b){ return Math.random()*(b-a)+a; }
 
-  function reset(){
-    bird.y = H/2; bird.vy = 0; bird.rot = 0;
-    pipes = []; frame = 0; score = 0; speed = 2.2;
-    running = true;
-    elScore.textContent = score;
-  }
+    // Create a pipe at x
+    function spawnPipeAt(x){
+      const top = Math.floor(rand(40, H/2 - 20));
+      const bottom = top + gap;
+      pipes.push({ x, top, bottom, passed:false });
+    }
 
-  function flap(){
-    if(!running){ reset(); return; }
-    bird.vy = jump;
-  }
+    // Create initial visible pipes (so player sees obstacles before starting)
+    function spawnInitial(count=4, spacing=110){
+      pipes = [];
+      const startX = 140; // some pipes partially on-screen
+      for(let i=0;i<count;i++){
+        spawnPipeAt(startX + i*spacing);
+      }
+    }
 
-  canvas.addEventListener('click', flap);
-  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
-  window.addEventListener('keydown', (e)=>{ if(e.code==='Space') { e.preventDefault(); flap(); }});
+    // Reset game to initial paused state (visible pipes)
+    function reset(){
+      bird.y = H/2; bird.vy = 0;
+      score = 0; frame = 0; speed = 2.2; running = false;
+      spawnInitial(4, 120);
+      elPoints.textContent = score;
+    }
 
-  function update(){
-    if(!running) return;
-    frame++;
+    // circle vs rect collision
+    function circleRect(cx, cy, r, rx, ry, rw, rh){
+      const closestX = Math.max(rx, Math.min(cx, rx+rw));
+      const closestY = Math.max(ry, Math.min(cy, ry+rh));
+      const dx = cx - closestX;
+      const dy = cy - closestY;
+      return (dx*dx + dy*dy) < r*r;
+    }
 
-    if(frame % 90 === 0) spawnPipe();
+    // Input: flap or start
+    function flap(){
+      if(!running){ running = true; bird.vy = jump; return; }
+      bird.vy = jump;
+    }
+    canvas.addEventListener('click', flap);
+    canvas.addEventListener('touchstart', function(e){ e.preventDefault(); flap(); }, {passive:false});
+    window.addEventListener('keydown', function(e){ if(e.code === 'Space'){ e.preventDefault(); flap(); }});
 
-    bird.vy += gravity;
-    bird.y += bird.vy;
-    bird.rot = Math.max(-0.6, Math.min(1.2, bird.vy / 10));
+    // Update logic
+    function update(){
+      if(!running) return;
+      frame++;
+      if(frame % 90 === 0) spawnPipeAt(W + 20);
 
-    for(let p of pipes) p.x -= speed;
+      bird.vy += gravity;
+      bird.y += bird.vy;
 
-    if(pipes.length && pipes[0].x < -60) pipes.shift();
+      // move pipes
+      for(let p of pipes) p.x -= speed;
 
-    for(let p of pipes){
-      if(circleRect(bird.x, bird.y, bird.r, p.x, 0, 40, p.top) ||
-         circleRect(bird.x, bird.y, bird.r, p.x, p.bottom, 40, H - p.bottom)){
-        running = false;
-        if(score > best){
-          best = score;
-          localStorage.setItem('flappy_best', best);
-          elBest.textContent = best;
+      // remove offscreen
+      while(pipes.length && pipes[0].x < -80) pipes.shift();
+
+      // collisions & scoring
+      for(let p of pipes){
+        if(circleRect(bird.x, bird.y, bird.r, p.x, 0, 40, p.top) ||
+           circleRect(bird.x, bird.y, bird.r, p.x, p.bottom, 40, H - p.bottom)){
+          running = false;
+          if(score > best){ best = score; localStorage.setItem('flappy_best', best); elBest.textContent = best; }
+        }
+        if(!p.passed && p.x + 40 < bird.x){
+          p.passed = true;
+          score++;
+          elPoints.textContent = score;
+          if(score % 6 === 0) speed = Math.min(5, speed + 0.25);
         }
       }
 
-      if(!p.passed && p.x + 40 < bird.x){
-        p.passed = true;
-        score++;
-        elScore.textContent = score;
-        if(score % 5 === 0) speed = Math.min(5, speed + 0.25);
+      // ground / ceiling
+      if(bird.y + bird.r >= H || bird.y - bird.r <= 0){
+        running = false;
+        if(score > best){ best = score; localStorage.setItem('flappy_best', best); elBest.textContent = best; }
       }
     }
 
-    if(bird.y + bird.r >= H){
-      running = false;
-      if(score > best){
-        best = score;
-        localStorage.setItem('flappy_best', best);
-        elBest.textContent = best;
-      }
-    }
-  }
-
-  function draw(){
-    ctx.fillStyle = '#70c5ce';
-    ctx.fillRect(0,0,W,H);
-
-    ctx.fillStyle = '#cdeef2';
-    ctx.beginPath(); ctx.ellipse(60 + Math.sin(frame/60)*8, 60, 36,16,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(180 + Math.cos(frame/80)*12, 40, 44,18,0,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle = '#4caf50';
-    for(let p of pipes){
-      ctx.fillRect(p.x, 0, 40, p.top);
-      ctx.fillRect(p.x, p.bottom, 40, H - p.bottom);
-      ctx.fillStyle = '#3f8a3f';
-      ctx.fillRect(p.x+2, Math.max(0,p.top-8), 36, 8);
-      ctx.fillRect(p.x+2, p.bottom, 36, 8);
-      ctx.fillStyle = '#4caf50';
-    }
-
-    ctx.fillStyle = '#f2efe9';
-    ctx.fillRect(0, H - 8, W, 8);
-
-    ctx.save();
-    ctx.translate(bird.x, bird.y);
-    ctx.rotate(bird.rot);
-    ctx.beginPath();
-    ctx.fillStyle = '#ffeb3b';
-    ctx.arc(0, 0, bird.r, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.fillStyle = '#000';
-    ctx.arc(6, -4, 3.2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
-
-    if(!running){
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    // Draw everything
+    function draw(){
+      // background
+      ctx.fillStyle = '#70c5ce';
       ctx.fillRect(0,0,W,H);
 
-      ctx.fillStyle = '#fff';
-      const pw = 240, ph = 140;
-      const px = (W-pw)/2, py = (H-ph)/2;
+      // clouds
+      ctx.fillStyle = '#cfeff3';
+      ctx.beginPath(); ctx.ellipse(50 + Math.sin(frame/60)*6, 60, 32, 14, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(190 + Math.cos(frame/80)*8, 44, 40, 16, 0, 0, Math.PI*2); ctx.fill();
 
-      roundRect(ctx, px, py, pw, ph, 12, true, false);
-      ctx.fillStyle = '#073b3b';
-      ctx.font = '18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Game Over', W/2, py + 34);
-      ctx.font = '14px sans-serif';
-      ctx.fillText('Pontos: ' + score, W/2, py + 64);
-      ctx.fillText('Melhor: ' + best, W/2, py + 88);
-      ctx.font = '12px sans-serif';
-      ctx.fillText('Clique / Toque / Espaço para reiniciar', W/2, py + 116);
+      // pipes
+      for(let p of pipes){
+        ctx.fillStyle = '#4caf50';
+        ctx.fillRect(Math.round(p.x), 0, 40, p.top);
+        ctx.fillRect(Math.round(p.x), p.bottom, 40, H - p.bottom);
+        ctx.fillStyle = '#3f8a3f';
+        ctx.fillRect(Math.round(p.x)+2, Math.max(0,p.top-6), 36, 8);
+        ctx.fillRect(Math.round(p.x)+2, p.bottom, 36, 8);
+      }
+
+      // ground
+      ctx.fillStyle = '#f3efe9';
+      ctx.fillRect(0, H - 8, W, 8);
+
+      // bird
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.rotate(Math.max(-0.7, Math.min(1.2, bird.vy/10)));
+      ctx.fillStyle = '#ffeb3b';
+      ctx.beginPath(); ctx.arc(0,0, bird.r, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(6, -5, 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // paused overlay
+      if(!running){
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#fff';
+        const pw = 250, ph = 120;
+        const px = (W-pw)/2, py = (H-ph)/2;
+        // panel
+        ctx.fillStyle = '#ffffff';
+        roundRect(ctx, px, py, pw, ph, 10, true);
+        ctx.fillStyle = '#073b3b';
+        ctx.font = '18px Arial';
+        ctx.textAlign = 'center';
+        if(score === 0 && frame < 10) {
+          ctx.fillText('Clique para iniciar', W/2, py + 40);
+          ctx.font = '13px Arial'; ctx.fillText('Toque / Espaço para pular', W/2, py + 70);
+        } else if(!running && score > 0) {
+          ctx.fillText('Game Over', W/2, py + 36);
+          ctx.font = '14px Arial'; ctx.fillText('Pontos: ' + score, W/2, py + 66);
+          ctx.fillText('Melhor: ' + best, W/2, py + 88);
+          ctx.font = '12px Arial'; ctx.fillText('Clique para reiniciar', W/2, py + 106);
+        } else {
+          ctx.fillText('Clique para iniciar', W/2, py + 40);
+        }
+      }
     }
-  }
 
-  function roundRect(ctx,x,y,w,h,r,fill,stroke){
-    if(typeof r === 'undefined') r=5;
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-    if(fill) ctx.fill();
-    if(stroke) ctx.stroke();
-  }
+    function roundRect(ctx,x,y,w,h,r,fill){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+      if(fill) ctx.fill();
+    }
 
-  function loop(){
-    update();
-    draw();
-    requestAnimationFrame(loop);
-  }
+    // main loop
+    function loop(){
+      update();
+      draw();
+      frame++;
+      requestAnimationFrame(loop);
+    }
 
-  running = false;
-  loop();
-  spawnPipe();
+    // init
+    spawnInitial(4, 110);
+    loop();
+
+    // expose reset on click when game over by allowing click to restart
+    canvas.addEventListener('click', function(){ if(!running){ score = 0; elPoints.textContent = 0; spawnInitial(4,110); running = true; }});
+
+    console.log('Flappy Pendinha: pronto. Abra este arquivo no Chrome se quiser (clique 2x no index.html).');
+  } catch (err) {
+    console.error('Erro no jogo:', err);
+    alert('Erro ao iniciar o jogo. Abra o console (F12) e me manda a mensagem de erro.');
+  }
 })();
 </script>
 </body>
