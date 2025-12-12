@@ -3,90 +3,192 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Flappy — Pendinha Games (Reset Total)</title>
+<title>Flappy — Pendinha Games (Fases + Ranking)</title>
 <style>
-  html,body{height:100%;margin:0;background:#70c5ce;display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,sans-serif}
-  .wrap{width:100%;max-width:460px;padding:14px;box-sizing:border-box}
-  canvas{width:100%;height:auto;border-radius:8px;display:block;background:#70c5ce;border:0;box-shadow:0 8px 24px rgba(0,0,0,0.15)}
-  .info{display:flex;justify-content:space-between;color:#042; margin-top:8px; font-weight:600}
-  .hint{font-size:13px;color:#033; text-align:center; margin-top:8px}
+  :root{font-family:Inter,system-ui,Arial,Helvetica,sans-serif}
+  html,body{height:100%;margin:0;background:#70c5ce;display:flex;align-items:center;justify-content:center}
+  .wrap{width:100%;max-width:520px;padding:18px;box-sizing:border-box}
+  canvas{display:block;width:100%;height:auto;background:#70c5ce;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.18)}
+  .ui{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:#073b3b}
+  .score{font-weight:800;font-size:18px}
+  .small{font-size:13px;color:#053033}
+  .hint{font-size:13px;color:#075a57;margin-top:8px;text-align:center}
+  /* modal / leaderboard */
+  .modal{position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:999;visibility:hidden;opacity:0;transition:opacity .18s}
+  .modal.show{visibility:visible;opacity:1}
+  .panel{background:white;padding:18px;border-radius:10px;max-width:420px;width:92%;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+  input[type="text"]{width:100%;padding:8px;margin-top:8px;border-radius:8px;border:1px solid #ccc;box-sizing:border-box}
+  button{background:#0ea5a6;color:white;padding:8px 12px;border-radius:8px;border:0;font-weight:700;cursor:pointer;margin-top:8px}
+  .lead-list{max-height:200px;overflow:auto;margin-top:8px}
+  .phase-badge{font-weight:700;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.6);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 </style>
 </head>
 <body>
   <div class="wrap">
-    <canvas id="game" width="320" height="480" aria-label="Flappy Pendinha"></canvas>
-    <div class="info"><div>Pontos: <span id="points">0</span></div><div>Melhor: <span id="best">0</span></div></div>
-    <div class="hint">Clique/Toque/Espaço → pular. Toque para iniciar depois do reset.</div>
+    <canvas id="game" width="360" height="520" aria-label="Flappy Pendinha"></canvas>
+    <div class="ui">
+      <div>
+        <div class="score">Pontos: <span id="points">0</span></div>
+        <div class="small">Melhor: <span id="best">0</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">Fase: <span id="phase">1</span></div>
+        <div style="height:6px"></div>
+        <div class="phase-badge" id="phase-badge">Iniciante</div>
+      </div>
+    </div>
+    <div class="hint">Clique/Toque/Espaço → pular. Ao bater, insira nome para salvar no ranking.</div>
+  </div>
+
+  <!-- Modal para salvar pontuação e ver leaderboard -->
+  <div id="modal" class="modal" role="dialog" aria-hidden="true">
+    <div class="panel">
+      <div id="modal-content"></div>
+      <div id="name-area" style="display:none">
+        <label>Seu nome:</label>
+        <input id="player-name" type="text" maxlength="20" placeholder="Seu nome aqui..." />
+        <button id="save-score">Salvar pontuação</button>
+      </div>
+      <div style="margin-top:10px">
+        <strong>Leaderboard (local)</strong>
+        <div class="lead-list" id="leaderboard"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="close-modal" style="background:#94a3b8">Fechar</button>
+          <button id="clear-lead" style="background:#ef4444">Limpar ranking</button>
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
-/* Flappy — Reset total ao colidir
-   - Ao bater, salva highscore, reinicia totalmente (pontuação 0 + canos reposicionados)
-   - Fica em pausa esperando o próximo clique/toque/Espaço para iniciar
+/*
+  Flappy com:
+   - imagem do pássaro (embutida como SVG data-url)
+   - canos mais espaçados (ajustável)
+   - canos infinitos (spawning contínuo)
+   - fases: quando score >= phaseTargets[currentPhase] vai pra próxima fase (cenário muda)
+   - ranking local: salva top scores em localStorage; permite inserir nome após game over
+   - reset total quando bater
 */
 
+/* ---------- CONFIGURÁVEL ----------- */
+const CONFIG = {
+  canvasW: 360,           // resolução interna
+  canvasH: 520,
+  initialGap: 160,        // espaço vertical entre canos (maior = mais fácil)
+  spawnSpacing: 170,      // espaçamento horizontal entre canos visíveis
+  spawnInitialCount: 4,   // quantos canos visíveis inicialmente
+  spawnIntervalFrames: 86,// frames entre novos canos
+  baseSpeed: 2.2,         // velocidade inicial
+  phaseTargets: [50, 150, 350, 1000], // pontos para avançar fases (você pode ajustar; 1000 é fase final)
+  phaseNames: ['Iniciante','Intermediário','Avançado','Desafio'],
+  maxLeaderboard: 10
+};
+/* ---------- FIM CONFIG ---------- */
+
 (function(){
-  // Elementos
+  // DOM
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  canvas.width = CONFIG.canvasW;
+  canvas.height = CONFIG.canvasH;
 
-  // resolução interna
-  const W = canvas.width = 320;
-  const H = canvas.height = 480;
+  // responsive visual
+  function resize(){ const maxW = Math.min(window.innerWidth - 36, 520); canvas.style.width = maxW + 'px'; }
+  window.addEventListener('resize', resize);
+  resize();
 
-  // estado do jogo
-  let bird = { x: 70, y: H/2, r: 12, vy: 0 };
-  let gravity = 0.34, jump = -7.2;
-  let pipes = []; // array de {x, top, bottom, passed}
-  let gap = 120;
-  let speed = 2.2;
-  let frame = 0;
-  let running = false; // se true, o jogo está em movimento
-  let score = 0;
-  let best = parseInt(localStorage.getItem('flappy_best') || '0', 10);
-
-  // DOM
+  // elements
   const elPoints = document.getElementById('points');
   const elBest = document.getElementById('best');
-  elPoints.textContent = score;
+  const elPhase = document.getElementById('phase');
+  const elPhaseBadge = document.getElementById('phase-badge');
+
+  // modal/leader
+  const modal = document.getElementById('modal');
+  const modalContent = document.getElementById('modal-content');
+  const nameArea = document.getElementById('name-area');
+  const inputName = document.getElementById('player-name');
+  const saveBtn = document.getElementById('save-score');
+  const leaderboardDiv = document.getElementById('leaderboard');
+  const closeModalBtn = document.getElementById('close-modal');
+  const clearLeadBtn = document.getElementById('clear-lead');
+
+  // bird image (SVG embedded)
+  // simple cartoon bird SVG base64
+  const birdSVG = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='80' height='60' viewBox='0 0 80 60'><g><ellipse cx='28' cy='30' rx='20' ry='16' fill='%23ffeb3b'/><circle cx='36' cy='24' r='5' fill='%23000'/><path d='M6 28 C 0 18, 12 10, 24 18' stroke='%23ffb86b' stroke-width='4' fill='none' stroke-linecap='round'/><path d='M44 18 C54 8,70 10,76 16' stroke='%23000' stroke-opacity='0.06' stroke-width='6' fill='none' stroke-linecap='round'/></g></svg>`);
+  const birdImg = new Image();
+  birdImg.src = 'data:image/svg+xml;utf8,' + birdSVG;
+
+  // game state
+  const W = canvas.width, H = canvas.height;
+  let bird = { x: 80, y: H/2, r: 18, vy: 0, rot: 0 };
+  let gravity = 0.36, jump = -8.2;
+  let pipes = []; // {x, top, bottom, passed}
+  let frame = 0;
+  let speed = CONFIG.baseSpeed;
+  let gap = CONFIG.initialGap;
+  let running = false;
+  let score = 0;
+  let best = parseInt(localStorage.getItem('flappy_best') || '0', 10);
+  let phase = 0; // index in phaseTargets
   elBest.textContent = best;
+  elPoints.textContent = 0;
+  elPhase.textContent = phase+1;
+  elPhaseBadge.textContent = CONFIG.phaseNames[phase];
 
-  // util
-  const rand = (a,b) => Math.random()*(b-a)+a;
-  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  // leaderboard storage helpers
+  function loadLeaderboard(){ try{ return JSON.parse(localStorage.getItem('flappy_lead')||'[]') }catch(e){return []} }
+  function saveLeaderboard(list){ localStorage.setItem('flappy_lead', JSON.stringify(list.slice(0, CONFIG.maxLeaderboard))) }
+  function addScoreToLeaderboard(name, pts){
+    const list = loadLeaderboard();
+    list.push({ name: name || 'Anon', pts: pts, date: Date.now() });
+    list.sort((a,b)=> b.pts - a.pts);
+    saveLeaderboard(list);
+  }
+  function clearLeaderboard(){
+    localStorage.removeItem('flappy_lead');
+    renderLeaderboard();
+  }
+  function renderLeaderboard(){
+    const list = loadLeaderboard();
+    if(!list.length){ leaderboardDiv.innerHTML = '<div style="color:#666">Nenhuma pontuação salva.</div>'; return; }
+    leaderboardDiv.innerHTML = list.map((p,i)=> `<div style="padding:6px 0;border-bottom:1px solid #eee"><strong>${i+1}. ${escapeHtml(p.name)}</strong> — ${p.pts} pts</div>`).join('');
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m])) }
 
-  // cria cano em X
+  // utility: spawn pipe at X
   function spawnPipeAt(x){
-    const top = Math.floor(rand(40, H/2 - 20));
+    const top = Math.floor(Math.random()*(H/2 - 60) + 40);
     const bottom = top + gap;
     pipes.push({ x: x, top: top, bottom: bottom, passed: false });
   }
 
-  // cria canos iniciais VISÍVEIS (campo de obstáculos antes de iniciar)
-  function spawnInitial(count = 5, spacing = 120){
+  // initial pipes visible before start
+  function spawnInitial(){
     pipes = [];
-    // Primeiro cano um pouco dentro da tela (visível)
     const startX = Math.floor(W - 40);
-    for(let i=0;i<count;i++){
-      spawnPipeAt(startX + i*spacing);
+    for(let i=0;i<CONFIG.spawnInitialCount;i++){
+      spawnPipeAt(startX + i * CONFIG.spawnSpacing);
     }
   }
 
-  // reinicia o jogo por completo (reset total)
+  // reset everything (full reset)
   function fullReset(){
-    // salvar melhor se necessário (se quiser salvar antes do reset, já foi feito no momento da colisão)
     score = 0;
     bird.y = H/2;
     bird.vy = 0;
-    speed = 2.2;
     frame = 0;
-    running = false; // pausa aguardando clique pra iniciar
+    speed = CONFIG.baseSpeed + phase * 0.4; // slight increase by phase
+    gap = CONFIG.initialGap - phase*8; // get a little harder per phase
+    running = false;
     elPoints.textContent = score;
-    // recria os canos para estado inicial (visíveis)
-    spawnInitial(5, 120);
+    elPhase.textContent = phase+1;
+    elPhaseBadge.textContent = CONFIG.phaseNames[phase] || 'Fase ' + (phase+1);
+    spawnInitial();
   }
 
-  // collision circle vs rect
+  // collision helper
   function circleRect(cx, cy, r, rx, ry, rw, rh){
     const closestX = Math.max(rx, Math.min(cx, rx+rw));
     const closestY = Math.max(ry, Math.min(cy, ry+rh));
@@ -95,76 +197,110 @@
     return (dx*dx + dy*dy) < r*r;
   }
 
-  // chamada para quando o jogador bate
+  // on hit: save best, show modal to save score
   function onHit(){
-    // guarda melhor
-    if(score > best){
-      best = score;
-      localStorage.setItem('flappy_best', best);
-      elBest.textContent = best;
-    }
-    // faz um reset total imediato (volta ao começo)
+    // save best if beat
+    if(score > best){ best = score; localStorage.setItem('flappy_best', best); elBest.textContent = best; }
+    // show modal with option to save name
+    showModal(`Game Over — Pontos: ${score}`, true);
+    // full reset AFTER showing modal (so user sees final score)
     fullReset();
-    // observe: o jogo fica pausado até o jogador clicar/toque/press Space
   }
 
-  // input: flap / start
+  // modal controls
+  function showModal(message, allowSave){
+    modalContent.innerHTML = `<div style="font-weight:800;margin-bottom:8px">${escapeHtml(message)}</div>`;
+    if(allowSave){
+      nameArea.style.display = 'block';
+      inputName.value = '';
+      saveBtn.onclick = ()=> {
+        const name = inputName.value.trim() || 'Anon';
+        addScoreToLeaderboard(name, score);
+        renderLeaderboard();
+        nameArea.style.display = 'none';
+      };
+    } else {
+      nameArea.style.display = 'none';
+    }
+    renderLeaderboard();
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden','false');
+  }
+  function closeModal(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); }
+
+  closeModalBtn.onclick = ()=> closeModal();
+  clearLeadBtn.onclick = ()=> { if(confirm('Limpar ranking local?')){ clearLeaderboard(); } };
+
+  // input - flap / start
   function flap(){
     if(!running){
-      // se estiver pausado, iniciar o jogo (estado limpo após reset)
       running = true;
-      bird.vy = jump;
+      bird.vy = -8.2; // primeiro flap ao iniciar
       return;
     }
-    bird.vy = jump;
+    bird.vy = -8.2;
   }
-
-  // listeners
   canvas.addEventListener('click', flap);
   canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
-  window.addEventListener('keydown', (e)=>{ if(e.code === 'Space'){ e.preventDefault(); flap(); }});
+  window.addEventListener('keydown', (e)=>{ if(e.code === 'Space'){ e.preventDefault(); flap(); } if(e.key==='l' || e.key==='L'){ showModal('Leaderboard', false); } });
 
-  // respawn inicial e estado pausado
-  spawnInitial(5,120);
-
-  // update
+  // main update
   function update(){
-    if(!running) return; // enquanto pausado, não atualiza posição nem moves pipes
+    if(!running) return;
     frame++;
-    // spawn novo cano periodicamente
-    if(frame % 86 === 0){
-      spawnPipeAt(W + 20);
-    }
+    if(frame % CONFIG.spawnIntervalFrames === 0) spawnPipeAt(W + 40);
 
     // physics
     bird.vy += gravity;
     bird.y += bird.vy;
+    bird.rot = Math.max(-1.0, Math.min(1.4, bird.vy / 12));
 
     // move pipes
     for(let p of pipes) p.x -= speed;
 
-    // remove canos fora da tela
-    while(pipes.length && pipes[0].x < -100) pipes.shift();
+    // remove offscreen
+    while(pipes.length && pipes[0].x < -120) pipes.shift();
 
-    // checar colisões e score
+    // collisions + score
     for(let p of pipes){
-      // colisão
-      if(circleRect(bird.x, bird.y, bird.r, p.x, 0, 40, p.top) ||
-         circleRect(bird.x, bird.y, bird.r, p.x, p.bottom, 40, H - p.bottom)){
+      if(circleRect(bird.x, bird.y, bird.r, p.x, 0, 46, p.top) ||
+         circleRect(bird.x, bird.y, bird.r, p.x, p.bottom, 46, H - p.bottom)){
         onHit();
-        return; // sai do update; já resetou
+        return;
       }
-      // marcar passagem (pontuar)
-      if(!p.passed && p.x + 40 < bird.x){
+      if(!p.passed && p.x + 46 < bird.x){
         p.passed = true;
         score++;
         elPoints.textContent = score;
-        // aumentar dificuldade aos poucos
-        if(score % 6 === 0) speed = clamp(speed + 0.25, 2.2, 6);
+        // increase speed slightly with score
+        if(score % 8 === 0) speed = Math.min(8, speed + 0.2);
+        // check phase advancement
+        const target = CONFIG.phaseTargets[phase] || Infinity;
+        if(score >= target){
+          // advance phase (if available)
+          if(phase < CONFIG.phaseTargets.length - 1){
+            phase++;
+            // adjust visuals or parameters
+            // change background color a bit per phase
+            if(phase === 1){ canvas.style.background = '#bfe6ff'; document.body.style.background = '#bfe6ff'; }
+            else if(phase === 2){ canvas.style.background = '#fff2cc'; document.body.style.background = '#fff2cc'; }
+            else if(phase === 3){ canvas.style.background = '#f0e6ff'; document.body.style.background = '#f0e6ff'; }
+            elPhase.textContent = phase+1; elPhaseBadge.textContent = CONFIG.phaseNames[phase] || ('Fase '+(phase+1));
+            // give a short pause and reset pipes into next phase start
+            running = false;
+            setTimeout(()=> { fullReset(); /* keep phase index */ running = true; }, 700);
+            return;
+          } else {
+            // last phase reached - you can define behavior (loop phases or show win)
+            showModal('Você completou todas as fases (parabéns)!', false);
+            fullReset();
+            return;
+          }
+        }
       }
     }
 
-    // chão / teto
+    // ground/ceiling
     if(bird.y + bird.r >= H || bird.y - bird.r <= 0){
       onHit();
       return;
@@ -173,109 +309,84 @@
 
   // draw
   function draw(){
-    ctx.clearRect(0,0,W,H);
-    // background
-    ctx.fillStyle = '#70c5ce';
+    // background fill
+    ctx.fillStyle = getComputedStyle(canvas).backgroundColor || '#70c5ce';
     ctx.fillRect(0,0,W,H);
 
-    // nuvens decorativas
-    ctx.fillStyle = '#cfeff3';
-    ctx.beginPath(); ctx.ellipse(48 + Math.sin(frame/70)*8, 62, 36, 16, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(180 + Math.cos(frame/88)*10, 46, 44, 18, 0, 0, Math.PI*2); ctx.fill();
+    // decorative cloud
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.ellipse(70 + Math.sin(frame/80)*8, 80, 40, 18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(200 + Math.cos(frame/100)*12, 56, 52, 22, 0, 0, Math.PI*2); ctx.fill();
 
-    // pipes
+    // draw pipes
     for(let p of pipes){
-      ctx.fillStyle = '#4caf50';
-      ctx.fillRect(Math.round(p.x), 0, 40, p.top);
-      ctx.fillRect(Math.round(p.x), p.bottom, 40, H - p.bottom);
-      // detalhes
-      ctx.fillStyle = '#3f8a3f';
-      ctx.fillRect(Math.round(p.x)+2, Math.max(0,p.top-8), 36, 8);
-      ctx.fillRect(Math.round(p.x)+2, p.bottom, 36, 8);
+      ctx.fillStyle = '#3fa34b';
+      ctx.fillRect(Math.round(p.x), 0, 46, p.top);
+      ctx.fillRect(Math.round(p.x), p.bottom, 46, H - p.bottom);
+      ctx.fillStyle = '#2f8a3a';
+      ctx.fillRect(Math.round(p.x)+4, Math.max(0,p.top-8), 38, 8);
+      ctx.fillRect(Math.round(p.x)+4, p.bottom, 38, 8);
     }
 
-    // ground
+    // ground line
     ctx.fillStyle = '#f3efe9';
     ctx.fillRect(0, H - 8, W, 8);
 
-    // bird
+    // draw bird image with rotation
     ctx.save();
     ctx.translate(bird.x, bird.y);
-    ctx.rotate(clamp(bird.vy/10, -0.8, 1.2));
-    ctx.fillStyle = '#ffeb3b';
-    ctx.beginPath(); ctx.arc(0,0,bird.r,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(6, -5, 3, 0, Math.PI*2); ctx.fill();
+    ctx.rotate(bird.rot);
+    const bw = 44, bh = 34; // drawn size
+    if(birdImg.complete) ctx.drawImage(birdImg, -bw/2, -bh/2, bw, bh);
+    else {
+      // fallback circle while image loads
+      ctx.fillStyle = '#ffeb3b';
+      ctx.beginPath(); ctx.arc(0,0,bird.r,0,Math.PI*2); ctx.fill();
+    }
     ctx.restore();
 
-    // overlay (quando pausado)
+    // overlay when paused
     if(!running){
-      ctx.fillStyle = 'rgba(0,0,0,0.36)';
+      ctx.fillStyle = 'rgba(0,0,0,0.26)';
       ctx.fillRect(0,0,W,H);
-      const pw = 260, ph = 130;
-      const px = (W-pw)/2, py = (H-ph)/2;
-      // painel branco
-      ctx.fillStyle = '#fff';
-      roundRect(ctx, px, py, pw, ph, 10, true);
+      const pw=300, ph=140, px=(W-pw)/2, py=(H-ph)/2;
+      ctx.fillStyle = '#fff'; roundRect(ctx, px, py, pw, ph, 12, true);
       ctx.fillStyle = '#073b3b';
       ctx.textAlign = 'center';
       ctx.font = '18px Arial';
       if(score === 0){
-        ctx.fillText('Clique para iniciar', W/2, py + 42);
-        ctx.font = '14px Arial';
-        ctx.fillText('Toque/Espaço para pular', W/2, py + 74);
+        ctx.fillText('Clique para iniciar', W/2, py + 46);
+        ctx.font = '13px Arial';
+        ctx.fillText('Toque / Espaço para pular', W/2, py + 78);
       } else {
-        ctx.fillText('Game Over', W/2, py + 36);
+        ctx.fillText('Game Over', W/2, py + 40);
         ctx.font = '14px Arial';
-        ctx.fillText('Pontos: ' + score, W/2, py + 68);
-        ctx.fillText('Melhor: ' + best, W/2, py + 94);
+        ctx.fillText('Pontos: ' + score, W/2, py + 74);
+        ctx.fillText('Toque para salvar sua pontuação', W/2, py + 100);
       }
     }
   }
 
   function roundRect(ctx,x,y,w,h,r,fill){
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
     if(fill) ctx.fill();
   }
 
-  // main loop
-  function loop(){
-    update();
-    draw();
-    frame++;
-    requestAnimationFrame(loop);
-  }
+  function loop(){ update(); draw(); frame++; requestAnimationFrame(loop); }
 
-  // start
-  fullReset = fullReset || fullReset; // no-op to allow function hoisting / safe
-  fullReset = fullReset || (()=>{}); // safety - will be replaced
-  // define fullReset function reference properly
-  // (we already defined fullReset above, but ensuring variable exists)
-  // initialize
-  fullReset = fullReset;
-  fullReset = fullReset; // harmless
-  // call the function defined earlier
-  fullReset = (function(){ /* placeholder replaced by actual function */ return fullReset; })();
-
-  // actually initialize by calling the defined fullReset implementation
-  // (call the previously defined function)
-  // but to be safe: call the reset logic directly:
-  score = 0;
-  bird.y = H/2;
-  bird.vy = 0;
-  speed = 2.2;
-  frame = 0;
-  running = false;
-  spawnInitial(5,120);
-
+  // init
+  spawnInitial();
   loop();
+  renderLeaderboard();
 
-  // expose restart on click when paused (already handled by flap())
+  // helper: show leaderboard/editor on modal after game over (save handled in onHit)
+  // clicking modal close or clicking outside closes
+  modal.addEventListener('click', (e)=>{ if(e.target === modal) closeModal(); });
+  function closeModal(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); }
+  function showModalMessage(msg){ modalContent.innerHTML = `<div style="font-weight:800;margin-bottom:8px">${escapeHtml(msg)}</div>`; nameArea.style.display='none'; renderLeaderboard(); modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); }
+  // expose close to close button already defined
+  // save score button already wired earlier
+
 })();
 </script>
 </body>
