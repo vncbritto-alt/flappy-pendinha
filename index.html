@@ -47,66 +47,65 @@ canvas{
 </div>
 
 <script>
-/* ================= BASE ================= */
+/* ========= BASE ========= */
 const BASE_W = 360;
 const BASE_H = 520;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-/* Resize seguro */
-function resize(){
-  const scale = Math.min(innerWidth/BASE_W, innerHeight/BASE_H);
+/* RESIZE */
+function resizeCanvas(){
+  const scale = Math.min(
+    window.innerWidth / BASE_W,
+    window.innerHeight / BASE_H
+  );
   canvas.width = BASE_W * scale;
   canvas.height = BASE_H * scale;
   ctx.setTransform(scale,0,0,scale,0,0);
 }
-resize();
-addEventListener("resize", resize);
-addEventListener("fullscreenchange", resize);
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+document.addEventListener("fullscreenchange", resizeCanvas);
 
-fullscreenBtn.onclick = ()=>{
-  document.fullscreenElement
-    ? document.exitFullscreen()
-    : document.documentElement.requestFullscreen();
+/* FULLSCREEN */
+document.getElementById("fullscreenBtn").onclick = ()=>{
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
 };
 
-/* ================= CONFIG ================= */
+/* ========= CONFIG ========= */
 const CFG = {
-  gravity: 0.35,
-  jump: -8,
-  baseSpeed: 2.2,
-  gap: 190,
-  pipeW: 46,
-  spacing: 220,
-  pool: 7
+  gravity:0.35,
+  jump:-8,
+  baseSpeed:2.2,
+  gap:190,
+  pipeW:46,
+  spacing:220,
+  pool:7
 };
 
-/* ================= STATE ================= */
-let bird, pipes, score, running;
+/* ========= STATE ========= */
+let bird, pipes, running, score;
 let animTime = 0;
-let gameState = "menu"; // menu | playing | leaderboard
+let gameState = "menu";
 let selectedSkin = localStorage.getItem("skin") || "bird";
 
 const skins = ["bird","bat","cat","dog","pig","robot","ghost"];
-const scenes = ["#70c5ce","#ffcc80","#3f51b5","#263238","#4caf50","#9c27b0"];
 
-/* ================= FUNDO (NUVENS) ================= */
-let clouds = [];
+/* ========= CENÁRIOS ========= */
+const scenes = [
+  "#70c5ce",
+  "#ffcc80",
+  "#3f51b5",
+  "#263238",
+  "#4caf50",
+  "#9c27b0"
+];
 
-function initClouds(){
-  clouds = [];
-  for(let i=0;i<6;i++){
-    clouds.push({
-      x: Math.random()*BASE_W,
-      y: Math.random()*200,
-      speed: 0.3 + Math.random()*0.4,
-      size: 20 + Math.random()*20
-    });
-  }
-}
-initClouds();
-
-/* ================= RESET ================= */
+/* ========= RESET ========= */
 function resetGame(){
   bird = { x:90, y:BASE_H/2, r:18, vy:0 };
   pipes = [];
@@ -125,72 +124,142 @@ function createPipe(x){
   return { x, top, bottom: top + CFG.gap, passed:false };
 }
 
-/* ================= INPUT ================= */
-canvas.addEventListener("click",e=>{
+/* ========= INPUT ========= */
+canvas.addEventListener("click",(e)=>{
   const r = canvas.getBoundingClientRect();
-  const mx = (e.clientX-r.left)*(BASE_W/canvas.width);
-  const my = (e.clientY-r.top)*(BASE_H/canvas.height);
+  const mx = (e.clientX - r.left) * (BASE_W / canvas.width);
+  const my = (e.clientY - r.top) * (BASE_H / canvas.height);
 
-  if(gameState==="leaderboard"){
-    if(mx>120&&mx<240&&my>420&&my<460) gameState="menu";
-    return;
-  }
-
-  if(gameState==="menu"){
+  if(gameState === "menu"){
     handleMenu(mx,my);
-    return;
+  } else {
+    running = true;
+    bird.vy = CFG.jump;
   }
-
-  running = true;
-  bird.vy = CFG.jump;
 });
 
 function handleMenu(mx,my){
   skins.forEach((s,i)=>{
-    const x=40+i*40, y=260;
-    if(mx>x-18&&mx<x+18&&my>y-18&&my<y+18){
-      selectedSkin=s;
+    const x = 40 + i*40;
+    const y = 260;
+    if(mx>x-18 && mx<x+18 && my>y-18 && my<y+18){
+      selectedSkin = s;
       localStorage.setItem("skin",s);
     }
   });
 
-  if(mx>120&&mx<240&&my>340&&my<380){
-    gameState="playing";
+  if(mx>120 && mx<240 && my>340 && my<380){
+    gameState = "playing";
     resetGame();
-  }
-
-  if(mx>120&&mx<240&&my>390&&my<430){
-    gameState="leaderboard";
   }
 }
 
-/* ================= COLLISION ================= */
+/* ========= COLLISION ========= */
 function hit(b,p){
   return b.x+b.r>p.x && b.x-b.r<p.x+CFG.pipeW &&
          (b.y-b.r<p.top || b.y+b.r>p.bottom);
 }
 
-/* ================= DESENHO DAS SKINS ================= */
+/* ========= SKINS (CORRIGIDAS) ========= */
 function drawSkin(type,x,y,rot){
   const t = animTime;
   ctx.save();
   ctx.translate(x,y);
   ctx.rotate(rot);
 
+  /* PASSARINHO */
   if(type==="bird"){
     const wing=Math.sin(t*10)*6;
     ctx.fillStyle="#ffeb3b";
-    ctx.beginPath();ctx.ellipse(0,0,20,16,0,0,Math.PI*2);ctx.fill();
-    ctx.save();ctx.rotate(wing*0.02);
+    ctx.beginPath(); ctx.ellipse(0,0,20,16,0,0,Math.PI*2); ctx.fill();
+
+    ctx.save();
+    ctx.rotate(wing*0.02);
     ctx.fillStyle="#fdd835";
-    ctx.beginPath();ctx.ellipse(-6,4,8,6,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-6,4,8,6,0,0,Math.PI*2); ctx.fill();
     ctx.restore();
+
     ctx.fillStyle="#ff9800";
-    ctx.beginPath();ctx.moveTo(18,-2);ctx.lineTo(30,0);ctx.lineTo(18,6);ctx.fill();
+    ctx.beginPath(); ctx.moveTo(18,-2); ctx.lineTo(30,0); ctx.lineTo(18,6); ctx.fill();
+
     ctx.fillStyle="#000";
-    ctx.beginPath();ctx.arc(6,-5,3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath(); ctx.arc(6,-5,3,0,Math.PI*2); ctx.fill();
   }
 
+  /* MORCEGO */
+  if(type==="bat"){
+    const wing=Math.sin(t*8)*10;
+    ctx.fillStyle="#333";
+    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+
+    ctx.strokeStyle="#222";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(-18,0); ctx.lineTo(-6,-6-wing);
+    ctx.moveTo(18,0); ctx.lineTo(6,-6-wing);
+    ctx.stroke();
+
+    ctx.fillStyle="#fff";
+    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
+  }
+
+  /* GATO */
+  if(type==="cat"){
+    const blink=Math.floor(t)%4===0;
+    ctx.fillStyle="#ffcc99";
+    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle="#ffcc99";
+    ctx.beginPath();
+    ctx.moveTo(-8,-10); ctx.lineTo(-2,-18); ctx.lineTo(2,-10);
+    ctx.moveTo(8,-10); ctx.lineTo(2,-18); ctx.lineTo(-2,-10);
+    ctx.fill();
+
+    if(!blink){
+      ctx.fillStyle="#000";
+      ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  /* CACHORRO */
+  if(type==="dog"){
+    ctx.fillStyle="#c68642";
+    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle="#a9743a";
+    ctx.fillRect(-18,-4,6,12);
+    ctx.fillRect(12,-4,6,12);
+
+    ctx.fillStyle="#000";
+    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
+  }
+
+  /* PORCO */
+  if(type==="pig"){
+    ctx.fillStyle="#ffb6c1";
+    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle="#ff8da1";
+    ctx.beginPath(); ctx.ellipse(0,4,6,4,0,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle="#000";
+    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
+  }
+
+  /* ROBÔ */
+  if(type==="robot"){
+    const eye=Math.floor(t)%2===0;
+    ctx.fillStyle="#90a4ae";
+    ctx.fillRect(-12,-12,24,24);
+
+    if(eye){
+      ctx.fillStyle="#000";
+      ctx.fillRect(-6,-2,4,4);
+      ctx.fillRect(2,-2,4,4);
+    }
+  }
+
+  /* FANTASMA */
   if(type==="ghost"){
     ctx.globalAlpha=0.7+Math.sin(t*3)*0.2;
     ctx.fillStyle="#fff";
@@ -200,93 +269,45 @@ function drawSkin(type,x,y,rot){
     ctx.lineTo(-14,12);
     ctx.closePath();
     ctx.fill();
+
+    ctx.fillStyle="#000";
+    ctx.beginPath(); ctx.arc(-4,-4,2,0,Math.PI*2); ctx.arc(4,-4,2,0,Math.PI*2); ctx.fill();
     ctx.globalAlpha=1;
   }
 
   ctx.restore();
 }
 
-/* ================= FUNDO ================= */
-function drawBackground(){
-  const fase = Math.floor(score / 10);
-  ctx.fillStyle = scenes[fase % scenes.length];
-  ctx.fillRect(0,0,BASE_W,BASE_H);
-
-  // Nuvens
-  ctx.fillStyle="rgba(255,255,255,0.8)";
-  clouds.forEach(c=>{
-    ctx.beginPath();
-    ctx.arc(c.x,c.y,c.size,0,Math.PI*2);
-    ctx.arc(c.x+c.size,c.y+5,c.size*0.8,0,Math.PI*2);
-    ctx.fill();
-  });
-}
-
-/* ================= UPDATE ================= */
+/* ========= UPDATE ========= */
 function update(){
   animTime += 0.15;
-
-  // mover nuvens sempre
-  clouds.forEach(c=>{
-    c.x -= c.speed;
-    if(c.x < -c.size*2){
-      c.x = BASE_W + c.size*2;
-      c.y = Math.random()*200;
-    }
-  });
-
   if(!running) return;
 
   bird.vy += CFG.gravity;
   bird.y += bird.vy;
 
   const fase = Math.floor(score/10);
-  const speed = CFG.baseSpeed + fase*0.3;
+  canvas.style.background = scenes[fase % scenes.length];
+  const speed = CFG.baseSpeed + fase * 0.3;
 
   for(const p of pipes){
     p.x -= speed;
-
-    if(!p.passed && p.x+CFG.pipeW < bird.x){
-      p.passed = true;
-      score++;
-    }
-
-    if(hit(bird,p)){
-      endGame();
-      return;
-    }
+    if(!p.passed && p.x+CFG.pipeW<bird.x){ p.passed=true; score++; }
+    if(hit(bird,p)){ gameState="menu"; return; }
   }
 
-  if(bird.y < 0 || bird.y > BASE_H){
-    endGame();
-  }
+  if(bird.y<0 || bird.y>BASE_H) gameState="menu";
 
-  if(pipes[0].x < -CFG.pipeW){
-    const last = pipes[pipes.length-1].x;
+  if(pipes[0].x<-CFG.pipeW){
+    const last=pipes[pipes.length-1].x;
     pipes.shift();
-    pipes.push(createPipe(last + CFG.spacing));
+    pipes.push(createPipe(last+CFG.spacing));
   }
 }
 
-/* ================= GAME OVER + RANKING ================= */
-function endGame(){
-  running = false;
-
-  if(score >= 20){
-    const name = prompt("Parabéns! Digite seu nome:");
-    if(name){
-      const ranking = JSON.parse(localStorage.getItem("ranking") || "[]");
-      ranking.push({name, score});
-      ranking.sort((a,b)=>b.score-a.score);
-      localStorage.setItem("ranking", JSON.stringify(ranking.slice(0,5)));
-    }
-  }
-  gameState="menu";
-}
-
-/* ================= DRAW ================= */
+/* ========= DRAW ========= */
 function draw(){
-  drawBackground();
+  ctx.clearRect(0,0,BASE_W,BASE_H);
 
   if(gameState==="menu"){
     ctx.fillStyle="#fff";
@@ -295,42 +316,18 @@ function draw(){
 
     skins.forEach((s,i)=>{
       const x=40+i*40, y=260;
-      ctx.strokeStyle = s===selectedSkin ? "#00f" : "#fff";
+      ctx.strokeStyle=s===selectedSkin?"#00f":"#fff";
       ctx.strokeRect(x-18,y-18,36,36);
       drawSkin(s,x,y,0);
     });
 
     ctx.fillStyle="#fff";
     ctx.fillRect(120,340,120,40);
-    ctx.fillRect(120,390,120,40);
-
     ctx.fillStyle="#000";
     ctx.fillText("JOGAR",150,368);
-    ctx.fillText("RANKING",138,418);
     return;
   }
 
-  if(gameState==="leaderboard"){
-    ctx.fillStyle="#000";
-    ctx.fillRect(0,0,BASE_W,BASE_H);
-
-    ctx.fillStyle="#fff";
-    ctx.font="22px Arial";
-    ctx.fillText("🏆 LEADERBOARD",80,80);
-
-    const r=JSON.parse(localStorage.getItem("ranking")||"[]");
-    ctx.font="16px Arial";
-    r.forEach((e,i)=>{
-      ctx.fillText(`${i+1}. ${e.name} - ${e.score}`,80,130+i*30);
-    });
-
-    ctx.fillRect(120,420,120,40);
-    ctx.fillStyle="#000";
-    ctx.fillText("VOLTAR",150,448);
-    return;
-  }
-
-  // JOGO
   ctx.fillStyle="#3fa34b";
   for(const p of pipes){
     ctx.fillRect(p.x,0,CFG.pipeW,p.top);
@@ -344,8 +341,7 @@ function draw(){
   ctx.fillText("Score: "+score,10,20);
 }
 
-/* ================= LOOP ================= */
-resetGame();
+/* ========= LOOP ========= */
 function loop(){
   update();
   draw();
