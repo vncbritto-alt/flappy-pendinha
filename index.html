@@ -6,35 +6,39 @@
 <title>Flappy Pendinha</title>
 
 <style>
-html,body{
-  margin:0;
-  padding:0;
-  background:#000;
-  font-family:Arial,Helvetica,sans-serif;
+/* ================== CSS BASE ================== */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  font-family: Arial, Helvetica, sans-serif;
 }
-#gameContainer{
-  position:relative;
-  max-width:520px;
-  margin:20px auto;
+
+#gameContainer {
+  position: relative;
+  max-width: 520px;
+  margin: 20px auto;
 }
-canvas{
-  width:100%;
-  height:auto;
-  border-radius:10px;
-  display:block;
+
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
 }
-#fullscreenBtn{
-  position:absolute;
-  top:10px;
-  right:10px;
-  z-index:10;
-  background:rgba(0,0,0,.6);
-  color:white;
-  border:none;
-  border-radius:6px;
-  padding:6px 10px;
-  cursor:pointer;
-  font-size:18px;
+
+#fullscreenBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 18px;
 }
 </style>
 </head>
@@ -47,56 +51,24 @@ canvas{
 </div>
 
 <script>
-/* ========= BASE ========= */
-const BASE_W = 360;
-const BASE_H = 520;
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+/* ============================================================
+   ===================== CONFIGURAÇÕES ========================
+   ============================================================ */
 
-/* RESIZE */
-function resizeCanvas(){
-  const scale = Math.min(
-    window.innerWidth / BASE_W,
-    window.innerHeight / BASE_H
-  );
-  canvas.width = BASE_W * scale;
-  canvas.height = BASE_H * scale;
-  ctx.setTransform(scale,0,0,scale,0,0);
-}
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
-document.addEventListener("fullscreenchange", resizeCanvas);
+const BASE_WIDTH  = 360;
+const BASE_HEIGHT = 520;
 
-/* FULLSCREEN */
-document.getElementById("fullscreenBtn").onclick = ()=>{
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
+const GAME_CONFIG = {
+  gravity: 0.35,
+  jumpForce: -8,
+  baseSpeed: 2.2,
+  pipeGap: 190,
+  pipeWidth: 46,
+  pipeSpacing: 220,
+  pipePoolSize: 7
 };
 
-/* ========= CONFIG ========= */
-const CFG = {
-  gravity:0.35,
-  jump:-8,
-  baseSpeed:2.2,
-  gap:190,
-  pipeW:46,
-  spacing:220,
-  pool:7
-};
-
-/* ========= STATE ========= */
-let bird, pipes, running, score;
-let animTime = 0;
-let gameState = "menu";
-let selectedSkin = localStorage.getItem("skin") || "bird";
-
-const skins = ["bird","bat","cat","dog","pig","robot","ghost"];
-
-/* ========= CENÁRIOS ========= */
-const scenes = [
+const SCENE_COLORS = [
   "#70c5ce",
   "#ffcc80",
   "#3f51b5",
@@ -105,249 +77,469 @@ const scenes = [
   "#9c27b0"
 ];
 
-/* ========= RESET ========= */
-function resetGame(){
-  bird = { x:90, y:BASE_H/2, r:18, vy:0 };
+/* ============================================================
+   ====================== CANVAS BASE =========================
+   ============================================================ */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+/* ---------- Resize seguro ---------- */
+function resizeCanvas() {
+  const scale = Math.min(
+    window.innerWidth / BASE_WIDTH,
+    window.innerHeight / BASE_HEIGHT
+  );
+
+  canvas.width  = BASE_WIDTH  * scale;
+  canvas.height = BASE_HEIGHT * scale;
+
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+
+window.addEventListener("resize", resizeCanvas);
+window.addEventListener("fullscreenchange", resizeCanvas);
+resizeCanvas();
+
+/* ---------- Fullscreen ---------- */
+document.getElementById("fullscreenBtn").onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+};
+
+/* ============================================================
+   ====================== ESTADO GLOBAL =======================
+   ============================================================ */
+
+let gameState = "menu"; 
+// menu | playing | leaderboard
+
+let bird;
+let pipes = [];
+let score = 0;
+let running = false;
+let animationTime = 0;
+
+/* ============================================================
+   ====================== SKINS ===============================
+   ============================================================ */
+
+const SKINS = [
+  "bird",
+  "ghost",
+  "cat",
+  "dog",
+  "robot"
+];
+
+let selectedSkin = localStorage.getItem("selectedSkin") || "bird";
+
+/* ============================================================
+   ====================== PARALLAX ============================
+   ============================================================ */
+
+// Camada distante
+let parallaxFar = [];
+
+// Camada média
+let parallaxMid = [];
+
+// Camada próxima
+let parallaxNear = [];
+
+function initParallax() {
+
+  parallaxFar = [];
+  parallaxMid = [];
+  parallaxNear = [];
+
+  // FAR
+  for (let i = 0; i < 4; i++) {
+    parallaxFar.push({
+      x: Math.random() * BASE_WIDTH,
+      y: 40 + Math.random() * 120,
+      speed: 0.1,
+      radius: 60 + Math.random() * 40
+    });
+  }
+
+  // MID
+  for (let i = 0; i < 5; i++) {
+    parallaxMid.push({
+      x: Math.random() * BASE_WIDTH,
+      y: 80 + Math.random() * 160,
+      speed: 0.3,
+      radius: 30 + Math.random() * 30
+    });
+  }
+
+  // NEAR
+  for (let i = 0; i < 6; i++) {
+    parallaxNear.push({
+      x: Math.random() * BASE_WIDTH,
+      y: 120 + Math.random() * 200,
+      speed: 0.6,
+      radius: 18 + Math.random() * 20
+    });
+  }
+}
+
+initParallax();
+
+/* ============================================================
+   ====================== RESET JOGO ==========================
+   ============================================================ */
+
+function resetGame() {
+  bird = {
+    x: 90,
+    y: BASE_HEIGHT / 2,
+    radius: 18,
+    velocity: 0
+  };
+
   pipes = [];
   score = 0;
   running = false;
 
-  let x = BASE_W;
-  for(let i=0;i<CFG.pool;i++){
-    pipes.push(createPipe(x));
-    x += CFG.spacing;
+  let startX = BASE_WIDTH;
+  for (let i = 0; i < GAME_CONFIG.pipePoolSize; i++) {
+    pipes.push(createPipe(startX));
+    startX += GAME_CONFIG.pipeSpacing;
   }
 }
 
-function createPipe(x){
-  const top = Math.random()*(BASE_H/2 - 80) + 40;
-  return { x, top, bottom: top + CFG.gap, passed:false };
+function createPipe(x) {
+  const topHeight = Math.random() * (BASE_HEIGHT / 2 - 80) + 40;
+
+  return {
+    x: x,
+    top: topHeight,
+    bottom: topHeight + GAME_CONFIG.pipeGap,
+    passed: false
+  };
 }
 
-/* ========= INPUT ========= */
-canvas.addEventListener("click",(e)=>{
-  const r = canvas.getBoundingClientRect();
-  const mx = (e.clientX - r.left) * (BASE_W / canvas.width);
-  const my = (e.clientY - r.top) * (BASE_H / canvas.height);
+/* ============================================================
+   ====================== INPUT ===============================
+   ============================================================ */
 
-  if(gameState === "menu"){
-    handleMenu(mx,my);
-  } else {
-    running = true;
-    bird.vy = CFG.jump;
+canvas.addEventListener("click", event => {
+
+  const rect = canvas.getBoundingClientRect();
+  const mx = (event.clientX - rect.left) * (BASE_WIDTH / canvas.width);
+  const my = (event.clientY - rect.top)  * (BASE_HEIGHT / canvas.height);
+
+  if (gameState === "leaderboard") {
+    if (mx > 120 && mx < 240 && my > 420 && my < 460) {
+      gameState = "menu";
+    }
+    return;
   }
+
+  if (gameState === "menu") {
+    handleMenuClick(mx, my);
+    return;
+  }
+
+  running = true;
+  bird.velocity = GAME_CONFIG.jumpForce;
 });
 
-function handleMenu(mx,my){
-  skins.forEach((s,i)=>{
-    const x = 40 + i*40;
+function handleMenuClick(mx, my) {
+
+  // Seleção de skins
+  SKINS.forEach((skin, index) => {
+    const x = 40 + index * 40;
     const y = 260;
-    if(mx>x-18 && mx<x+18 && my>y-18 && my<y+18){
-      selectedSkin = s;
-      localStorage.setItem("skin",s);
+
+    if (
+      mx > x - 18 && mx < x + 18 &&
+      my > y - 18 && my < y + 18
+    ) {
+      selectedSkin = skin;
+      localStorage.setItem("selectedSkin", skin);
     }
   });
 
-  if(mx>120 && mx<240 && my>340 && my<380){
+  // Botão jogar
+  if (mx > 120 && mx < 240 && my > 340 && my < 380) {
     gameState = "playing";
     resetGame();
   }
+
+  // Botão ranking
+  if (mx > 120 && mx < 240 && my > 390 && my < 430) {
+    gameState = "leaderboard";
+  }
 }
 
-/* ========= COLLISION ========= */
-function hit(b,p){
-  return b.x+b.r>p.x && b.x-b.r<p.x+CFG.pipeW &&
-         (b.y-b.r<p.top || b.y+b.r>p.bottom);
+/* ============================================================
+   ====================== COLISÃO =============================
+   ============================================================ */
+
+function checkCollision(bird, pipe) {
+  if (
+    bird.x + bird.radius > pipe.x &&
+    bird.x - bird.radius < pipe.x + GAME_CONFIG.pipeWidth
+  ) {
+    if (
+      bird.y - bird.radius < pipe.top ||
+      bird.y + bird.radius > pipe.bottom
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
-/* ========= SKINS (CORRIGIDAS) ========= */
-function drawSkin(type,x,y,rot){
-  const t = animTime;
+/* ============================================================
+   ====================== DESENHO SKINS =======================
+   ============================================================ */
+
+function drawSkin(type, x, y, rotation) {
+
   ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
 
-  /* PASSARINHO */
-  if(type==="bird"){
-    const wing=Math.sin(t*10)*6;
-    ctx.fillStyle="#ffeb3b";
-    ctx.beginPath(); ctx.ellipse(0,0,20,16,0,0,Math.PI*2); ctx.fill();
+  if (type === "bird") {
+    const wing = Math.sin(animationTime * 10) * 6;
+
+    ctx.fillStyle = "#ffeb3b";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 20, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.save();
-    ctx.rotate(wing*0.02);
-    ctx.fillStyle="#fdd835";
-    ctx.beginPath(); ctx.ellipse(-6,4,8,6,0,0,Math.PI*2); ctx.fill();
+    ctx.rotate(wing * 0.02);
+    ctx.fillStyle = "#fdd835";
+    ctx.beginPath();
+    ctx.ellipse(-6, 4, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 
-    ctx.fillStyle="#ff9800";
-    ctx.beginPath(); ctx.moveTo(18,-2); ctx.lineTo(30,0); ctx.lineTo(18,6); ctx.fill();
-
-    ctx.fillStyle="#000";
-    ctx.beginPath(); ctx.arc(6,-5,3,0,Math.PI*2); ctx.fill();
-  }
-
-  /* MORCEGO */
-  if(type==="bat"){
-    const wing=Math.sin(t*8)*10;
-    ctx.fillStyle="#333";
-    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
-
-    ctx.strokeStyle="#222";
-    ctx.lineWidth=2;
+    ctx.fillStyle = "#ff9800";
     ctx.beginPath();
-    ctx.moveTo(-18,0); ctx.lineTo(-6,-6-wing);
-    ctx.moveTo(18,0); ctx.lineTo(6,-6-wing);
-    ctx.stroke();
-
-    ctx.fillStyle="#fff";
-    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
-  }
-
-  /* GATO */
-  if(type==="cat"){
-    const blink=Math.floor(t)%4===0;
-    ctx.fillStyle="#ffcc99";
-    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle="#ffcc99";
-    ctx.beginPath();
-    ctx.moveTo(-8,-10); ctx.lineTo(-2,-18); ctx.lineTo(2,-10);
-    ctx.moveTo(8,-10); ctx.lineTo(2,-18); ctx.lineTo(-2,-10);
+    ctx.moveTo(18, -2);
+    ctx.lineTo(30, 0);
+    ctx.lineTo(18, 6);
     ctx.fill();
 
-    if(!blink){
-      ctx.fillStyle="#000";
-      ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
-    }
-  }
-
-  /* CACHORRO */
-  if(type==="dog"){
-    ctx.fillStyle="#c68642";
-    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle="#a9743a";
-    ctx.fillRect(-18,-4,6,12);
-    ctx.fillRect(12,-4,6,12);
-
-    ctx.fillStyle="#000";
-    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
-  }
-
-  /* PORCO */
-  if(type==="pig"){
-    ctx.fillStyle="#ffb6c1";
-    ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle="#ff8da1";
-    ctx.beginPath(); ctx.ellipse(0,4,6,4,0,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle="#000";
-    ctx.beginPath(); ctx.arc(-4,-2,2,0,Math.PI*2); ctx.arc(4,-2,2,0,Math.PI*2); ctx.fill();
-  }
-
-  /* ROBÔ */
-  if(type==="robot"){
-    const eye=Math.floor(t)%2===0;
-    ctx.fillStyle="#90a4ae";
-    ctx.fillRect(-12,-12,24,24);
-
-    if(eye){
-      ctx.fillStyle="#000";
-      ctx.fillRect(-6,-2,4,4);
-      ctx.fillRect(2,-2,4,4);
-    }
-  }
-
-  /* FANTASMA */
-  if(type==="ghost"){
-    ctx.globalAlpha=0.7+Math.sin(t*3)*0.2;
-    ctx.fillStyle="#fff";
+    ctx.fillStyle = "#000";
     ctx.beginPath();
-    ctx.arc(0,-4,14,Math.PI,0);
-    ctx.lineTo(14,12);
-    ctx.lineTo(-14,12);
+    ctx.arc(6, -5, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (type === "ghost") {
+    ctx.globalAlpha = 0.7 + Math.sin(animationTime * 3) * 0.2;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(0, -4, 14, Math.PI, 0);
+    ctx.lineTo(14, 12);
+    ctx.lineTo(-14, 12);
     ctx.closePath();
     ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
-    ctx.fillStyle="#000";
-    ctx.beginPath(); ctx.arc(-4,-4,2,0,Math.PI*2); ctx.arc(4,-4,2,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha=1;
+  if (type === "robot") {
+    ctx.fillStyle = "#90a4ae";
+    ctx.fillRect(-12, -12, 24, 24);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(-6, -2, 4, 4);
+    ctx.fillRect(2, -2, 4, 4);
   }
 
   ctx.restore();
 }
 
-/* ========= UPDATE ========= */
-function update(){
-  animTime += 0.15;
-  if(!running) return;
+/* ============================================================
+   ====================== UPDATE ==============================
+   ============================================================ */
 
-  bird.vy += CFG.gravity;
-  bird.y += bird.vy;
+function update() {
 
-  const fase = Math.floor(score/10);
-  canvas.style.background = scenes[fase % scenes.length];
-  const speed = CFG.baseSpeed + fase * 0.3;
+  animationTime += 0.15;
 
-  for(const p of pipes){
-    p.x -= speed;
-    if(!p.passed && p.x+CFG.pipeW<bird.x){ p.passed=true; score++; }
-    if(hit(bird,p)){ gameState="menu"; return; }
+  // Parallax movimentação
+  parallaxFar.forEach(e => {
+    e.x -= e.speed;
+    if (e.x < -e.radius * 2) e.x = BASE_WIDTH + e.radius * 2;
+  });
+
+  parallaxMid.forEach(e => {
+    e.x -= e.speed;
+    if (e.x < -e.radius * 2) e.x = BASE_WIDTH + e.radius * 2;
+  });
+
+  parallaxNear.forEach(e => {
+    e.x -= e.speed;
+    if (e.x < -e.radius * 2) e.x = BASE_WIDTH + e.radius * 2;
+  });
+
+  if (!running) return;
+
+  bird.velocity += GAME_CONFIG.gravity;
+  bird.y += bird.velocity;
+
+  const phase = Math.floor(score / 10);
+  const speed = GAME_CONFIG.baseSpeed + phase * 0.3;
+
+  pipes.forEach(pipe => {
+    pipe.x -= speed;
+
+    if (!pipe.passed && pipe.x + GAME_CONFIG.pipeWidth < bird.x) {
+      pipe.passed = true;
+      score++;
+    }
+
+    if (checkCollision(bird, pipe)) {
+      endGame();
+    }
+  });
+
+  if (bird.y < 0 || bird.y > BASE_HEIGHT) {
+    endGame();
   }
 
-  if(bird.y<0 || bird.y>BASE_H) gameState="menu";
-
-  if(pipes[0].x<-CFG.pipeW){
-    const last=pipes[pipes.length-1].x;
+  if (pipes.length && pipes[0].x < -GAME_CONFIG.pipeWidth) {
+    const lastX = pipes[pipes.length - 1].x;
     pipes.shift();
-    pipes.push(createPipe(last+CFG.spacing));
+    pipes.push(createPipe(lastX + GAME_CONFIG.pipeSpacing));
   }
 }
 
-/* ========= DRAW ========= */
-function draw(){
-  ctx.clearRect(0,0,BASE_W,BASE_H);
+/* ============================================================
+   ====================== GAME OVER ===========================
+   ============================================================ */
 
-  if(gameState==="menu"){
-    ctx.fillStyle="#fff";
-    ctx.font="22px Arial";
-    ctx.fillText("Escolha seu personagem",40,120);
+function endGame() {
+  running = false;
 
-    skins.forEach((s,i)=>{
-      const x=40+i*40, y=260;
-      ctx.strokeStyle=s===selectedSkin?"#00f":"#fff";
-      ctx.strokeRect(x-18,y-18,36,36);
-      drawSkin(s,x,y,0);
+  if (score >= 20) {
+    const name = prompt("Digite seu nome:");
+    if (name) {
+      const ranking = JSON.parse(localStorage.getItem("ranking") || "[]");
+      ranking.push({ name, score });
+      ranking.sort((a,b) => b.score - a.score);
+      localStorage.setItem("ranking", JSON.stringify(ranking.slice(0,5)));
+    }
+  }
+
+  gameState = "menu";
+}
+
+/* ============================================================
+   ====================== DRAW ================================
+   ============================================================ */
+
+function drawBackground() {
+
+  const phase = Math.floor(score / 10);
+  ctx.fillStyle = SCENE_COLORS[phase % SCENE_COLORS.length];
+  ctx.fillRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  parallaxFar.forEach(e => {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  parallaxMid.forEach(e => {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  parallaxNear.forEach(e => {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function draw() {
+
+  drawBackground();
+
+  if (gameState === "menu") {
+    ctx.fillStyle = "#fff";
+    ctx.font = "22px Arial";
+    ctx.fillText("Flappy Pendinha", 80, 140);
+
+    SKINS.forEach((skin, index) => {
+      const x = 40 + index * 40;
+      const y = 260;
+      ctx.strokeStyle = skin === selectedSkin ? "#00f" : "#fff";
+      ctx.strokeRect(x - 18, y - 18, 36, 36);
+      drawSkin(skin, x, y, 0);
     });
 
-    ctx.fillStyle="#fff";
-    ctx.fillRect(120,340,120,40);
-    ctx.fillStyle="#000";
-    ctx.fillText("JOGAR",150,368);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(120, 340, 120, 40);
+    ctx.fillRect(120, 390, 120, 40);
+
+    ctx.fillStyle = "#000";
+    ctx.fillText("JOGAR", 150, 368);
+    ctx.fillText("RANKING", 138, 418);
     return;
   }
 
-  ctx.fillStyle="#3fa34b";
-  for(const p of pipes){
-    ctx.fillRect(p.x,0,CFG.pipeW,p.top);
-    ctx.fillRect(p.x,p.bottom,CFG.pipeW,BASE_H-p.bottom);
+  if (gameState === "leaderboard") {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "22px Arial";
+    ctx.fillText("🏆 LEADERBOARD", 80, 80);
+
+    const ranking = JSON.parse(localStorage.getItem("ranking") || "[]");
+    ctx.font = "16px Arial";
+
+    ranking.forEach((entry, i) => {
+      ctx.fillText(`${i+1}. ${entry.name} - ${entry.score}`, 80, 130 + i * 30);
+    });
+
+    ctx.fillRect(120, 420, 120, 40);
+    ctx.fillStyle = "#000";
+    ctx.fillText("VOLTAR", 150, 448);
+    return;
   }
 
-  drawSkin(selectedSkin,bird.x,bird.y,bird.vy/10);
+  ctx.fillStyle = "#3fa34b";
+  pipes.forEach(pipe => {
+    ctx.fillRect(pipe.x, 0, GAME_CONFIG.pipeWidth, pipe.top);
+    ctx.fillRect(pipe.x, pipe.bottom, GAME_CONFIG.pipeWidth, BASE_HEIGHT - pipe.bottom);
+  });
 
-  ctx.fillStyle="#fff";
-  ctx.font="16px Arial";
-  ctx.fillText("Score: "+score,10,20);
+  drawSkin(selectedSkin, bird.x, bird.y, bird.velocity / 10);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "16px Arial";
+  ctx.fillText("Score: " + score, 10, 20);
 }
 
-/* ========= LOOP ========= */
-function loop(){
+/* ============================================================
+   ====================== LOOP ================================
+   ============================================================ */
+
+resetGame();
+
+function gameLoop() {
   update();
   draw();
-  requestAnimationFrame(loop);
+  requestAnimationFrame(gameLoop);
 }
-loop();
+
+gameLoop();
 </script>
 
 </body>
