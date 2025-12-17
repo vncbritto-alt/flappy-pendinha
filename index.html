@@ -9,7 +9,7 @@
 html,body{
   margin:0;
   padding:0;
-  background:#70c5ce;
+  background:#000;
   font-family:Arial,Helvetica,sans-serif;
 }
 #gameContainer{
@@ -20,9 +20,7 @@ html,body{
 canvas{
   width:100%;
   height:auto;
-  background:#70c5ce;
   border-radius:10px;
-  box-shadow:0 10px 30px rgba(0,0,0,.25);
   display:block;
 }
 #fullscreenBtn{
@@ -49,12 +47,13 @@ canvas{
 </div>
 
 <script>
-/* ================= BASE ================= */
+/* ===== BASE ===== */
 const BASE_W = 360;
 const BASE_H = 520;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+/* RESIZE */
 function resizeCanvas(){
   const scale = Math.min(
     window.innerWidth / BASE_W,
@@ -77,26 +76,34 @@ document.getElementById("fullscreenBtn").onclick = ()=>{
   }
 };
 
-/* ================= CONFIG ================= */
+/* ===== CONFIG ===== */
 const CFG = {
   gravity:0.35,
   jump:-8,
-  speed:2.2,
+  baseSpeed:2.2,
   gap:190,
   pipeW:46,
   spacing:220,
   pool:7
 };
 
-/* ================= STATE ================= */
+/* ===== STATE ===== */
 let bird, pipes, running, score;
+let animTime=0;
 let gameState="menu";
 let selectedSkin = localStorage.getItem("skin") || "bird";
-let animTime = 0;
 
-const skins=["bird","bat","cat","dog","pig","robot","ghost"];
+/* ===== FASES / CENÁRIOS ===== */
+const scenes = [
+  "#70c5ce", // dia
+  "#ffcc80", // tarde
+  "#3f51b5", // noite
+  "#263238", // cidade escura
+  "#4caf50", // floresta
+  "#9c27b0"  // fantasia
+];
 
-/* ================= RESET ================= */
+/* ===== RESET ===== */
 function resetGame(){
   bird={x:90,y:BASE_H/2,r:18,vy:0};
   pipes=[];
@@ -115,134 +122,63 @@ function createPipe(x){
   return{x,top,bottom:top+CFG.gap,passed:false};
 }
 
-/* ================= INPUT ================= */
-canvas.addEventListener("click",(e)=>{
-  const r=canvas.getBoundingClientRect();
-  const mx=(e.clientX-r.left)*(BASE_W/canvas.width);
-  const my=(e.clientY-r.top)*(BASE_H/canvas.height);
-
-  if(gameState==="menu") handleMenu(mx,my);
-  else{ running=true; bird.vy=CFG.jump; }
+/* ===== INPUT ===== */
+canvas.addEventListener("click",()=>{
+  if(!running){
+    running=true;
+    bird.vy=CFG.jump;
+  }else{
+    bird.vy=CFG.jump;
+  }
 });
 
-function handleMenu(mx,my){
-  skins.forEach((s,i)=>{
-    const x=40+i*40, y=260;
-    if(mx>x-18&&mx<x+18&&my>y-18&&my<y+18){
-      selectedSkin=s;
-      localStorage.setItem("skin",s);
-    }
-  });
-  if(mx>120&&mx<240&&my>340&&my<380){
-    gameState="playing";
-    resetGame();
-  }
-}
-
-/* ================= COLLISION ================= */
+/* ===== COLLISION ===== */
 function hit(b,p){
-  return b.x+b.r>p.x&&b.x-b.r<p.x+CFG.pipeW&&
-         (b.y-b.r<p.top||b.y+b.r>p.bottom);
+  return b.x+b.r>p.x && b.x-b.r<p.x+CFG.pipeW &&
+    (b.y-b.r<p.top || b.y+b.r>p.bottom);
 }
 
-/* ================= DRAW SKINS (ANIMADAS) ================= */
-function drawSkin(type,x,y,rot){
-  const t=animTime;
+/* ===== DRAW PLAYER (simples) ===== */
+function drawPlayer(){
   ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
-
-  if(type==="bird"){
-    const wing=Math.sin(t*10)*6;
-    ctx.fillStyle="#ffeb3b";
-    ctx.beginPath();ctx.ellipse(0,0,20,16,0,0,Math.PI*2);ctx.fill();
-    ctx.save();
-    ctx.rotate(wing*0.02);
-    ctx.fillStyle="#fdd835";
-    ctx.beginPath();ctx.ellipse(-6,4,8,6,0,0,Math.PI*2);ctx.fill();
-    ctx.restore();
-    ctx.fillStyle="#ff9800";
-    ctx.beginPath();ctx.moveTo(18,-2);ctx.lineTo(30,0);ctx.lineTo(18,6);ctx.fill();
-    ctx.fillStyle="#000";
-    ctx.beginPath();ctx.arc(6,-5,3,0,Math.PI*2);ctx.fill();
-  }
-
-  if(type==="bat"){
-    const wing=Math.sin(t*8)*10;
-    ctx.fillStyle="#333";
-    ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle="#222";ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(-18,0);ctx.lineTo(-6,-6-wing);
-    ctx.moveTo(18,0);ctx.lineTo(6,-6-wing);
-    ctx.stroke();
-    ctx.fillStyle="#fff";
-    ctx.beginPath();ctx.arc(-4,-2,2,0,Math.PI*2);ctx.arc(4,-2,2,0,Math.PI*2);ctx.fill();
-  }
-
-  if(type==="cat"){
-    const blink=Math.floor(t)%4===0;
-    ctx.fillStyle="#ffcc99";
-    ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-8,-10);ctx.lineTo(-2,-18);ctx.lineTo(2,-10);
-    ctx.moveTo(8,-10);ctx.lineTo(2,-18);ctx.lineTo(-2,-10);
-    ctx.fill();
-    ctx.fillStyle="#000";
-    if(!blink){
-      ctx.beginPath();ctx.arc(-4,-2,2,0,Math.PI*2);ctx.arc(4,-2,2,0,Math.PI*2);ctx.fill();
-    }
-  }
-
-  if(type==="dog"){
-    ctx.fillStyle="#c68642";
-    ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fill();
-    ctx.fillRect(-18,-4,6,12);ctx.fillRect(12,-4,6,12);
-  }
-
-  if(type==="pig"){
-    ctx.fillStyle="#ffb6c1";
-    ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle="#ff8da1";
-    ctx.beginPath();ctx.ellipse(0,4,6,4,0,0,Math.PI*2);ctx.fill();
-  }
-
-  if(type==="robot"){
-    const eye=Math.floor(t)%2===0;
-    ctx.fillStyle="#90a4ae";
-    ctx.fillRect(-12,-12,24,24);
-    ctx.fillStyle="#000";
-    if(eye){ctx.fillRect(-6,-2,4,4);ctx.fillRect(2,-2,4,4);}
-  }
-
-  if(type==="ghost"){
-    ctx.globalAlpha=0.7+Math.sin(t*3)*0.2;
-    ctx.fillStyle="#fff";
-    ctx.beginPath();
-    ctx.arc(0,-4,14,Math.PI,0);
-    ctx.lineTo(14,12);ctx.lineTo(-14,12);
-    ctx.closePath();ctx.fill();
-  }
-
+  ctx.translate(bird.x,bird.y);
+  ctx.rotate(bird.vy/10);
+  ctx.fillStyle="#ffeb3b";
+  ctx.beginPath();
+  ctx.ellipse(0,0,20,16,0,0,Math.PI*2);
+  ctx.fill();
   ctx.restore();
-  ctx.globalAlpha=1;
 }
 
-/* ================= UPDATE ================= */
+/* ===== UPDATE ===== */
 function update(){
-  animTime+=0.15;
+  animTime+=0.1;
   if(!running) return;
 
   bird.vy+=CFG.gravity;
   bird.y+=bird.vy;
 
+  const fase=Math.floor(score/10);
+  const speed=CFG.baseSpeed + fase*0.3;
+  canvas.style.background = scenes[fase % scenes.length];
+
   for(const p of pipes){
-    p.x-=CFG.speed;
-    if(!p.passed&&p.x+CFG.pipeW<bird.x){p.passed=true;score++;}
-    if(hit(bird,p)){gameState="menu";return;}
+    p.x-=speed;
+
+    if(!p.passed && p.x+CFG.pipeW<bird.x){
+      p.passed=true;
+      score++;
+    }
+
+    if(hit(bird,p)){
+      endGame();
+      return;
+    }
   }
 
-  if(bird.y<0||bird.y>BASE_H) gameState="menu";
+  if(bird.y<0 || bird.y>BASE_H){
+    endGame();
+  }
 
   if(pipes[0].x<-CFG.pipeW){
     const last=pipes[pipes.length-1].x;
@@ -251,24 +187,25 @@ function update(){
   }
 }
 
-/* ================= DRAW ================= */
+/* ===== GAME OVER + RANKING ===== */
+function endGame(){
+  running=false;
+
+  if(score>=20){
+    const name=prompt("Parabéns! Digite seu nome:");
+    if(name){
+      const ranking=JSON.parse(localStorage.getItem("ranking")||"[]");
+      ranking.push({name,score});
+      ranking.sort((a,b)=>b.score-a.score);
+      localStorage.setItem("ranking",JSON.stringify(ranking.slice(0,5)));
+    }
+  }
+  resetGame();
+}
+
+/* ===== DRAW ===== */
 function draw(){
   ctx.clearRect(0,0,BASE_W,BASE_H);
-
-  if(gameState==="menu"){
-    ctx.fillStyle="#000";ctx.font="22px Arial";
-    ctx.fillText("Escolha seu personagem",40,120);
-    skins.forEach((s,i)=>{
-      const x=40+i*40,y=260;
-      ctx.strokeStyle=s===selectedSkin?"#00f":"#000";
-      ctx.strokeRect(x-18,y-18,36,36);
-      drawSkin(s,x,y,0);
-    });
-    ctx.fillRect(120,340,120,40);
-    ctx.fillStyle="#fff";
-    ctx.fillText("JOGAR",150,368);
-    return;
-  }
 
   ctx.fillStyle="#3fa34b";
   for(const p of pipes){
@@ -276,14 +213,20 @@ function draw(){
     ctx.fillRect(p.x,p.bottom,CFG.pipeW,BASE_H-p.bottom);
   }
 
-  drawSkin(selectedSkin,bird.x,bird.y,bird.vy/10);
+  drawPlayer();
 
-  ctx.fillStyle="#000";ctx.font="16px Arial";
+  ctx.fillStyle="#000";
+  ctx.font="16px Arial";
   ctx.fillText("Score: "+score,10,20);
 }
 
-/* ================= LOOP ================= */
-function loop(){update();draw();requestAnimationFrame(loop);}
+/* ===== LOOP ===== */
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+resetGame();
 loop();
 </script>
 
