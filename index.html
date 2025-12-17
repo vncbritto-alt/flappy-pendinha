@@ -12,13 +12,11 @@ html,body{
   background:#70c5ce;
   font-family:Arial,Helvetica,sans-serif;
 }
-
 #gameContainer{
   position:relative;
   max-width:520px;
   margin:20px auto;
 }
-
 canvas{
   width:100%;
   height:auto;
@@ -27,7 +25,6 @@ canvas{
   box-shadow:0 10px 30px rgba(0,0,0,.25);
   display:block;
 }
-
 #fullscreenBtn{
   position:absolute;
   top:10px;
@@ -52,13 +49,13 @@ canvas{
 </div>
 
 <script>
-/* ================= BASE / RESIZE ================= */
+/* ================= BASE ================= */
 const BASE_WIDTH = 360;
 const BASE_HEIGHT = 520;
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+/* RESIZE */
 function resizeCanvas(){
   const scale = Math.min(
     window.innerWidth / BASE_WIDTH,
@@ -83,23 +80,20 @@ document.getElementById("fullscreenBtn").onclick = ()=>{
 
 /* ================= CONFIG ================= */
 const CONFIG = {
-  gravity: 0.35,
-  jump: -8,
-  gap: 190,
-  baseSpeed: 2.2,
-  pipeWidth: 46,
-  spacing: 220,
-  pool: 7,
-  pointsPerPhase: 20,
-  maxPhases: 30
+  gravity:0.35,
+  jump:-8,
+  gap:190,
+  speed:2.2,
+  pipeWidth:46,
+  spacing:220,
+  pool:7
 };
 
 /* ================= STATE ================= */
-let bird, pipes, running, score, phase, speed;
-let gameState = "menu"; // menu | playing
+let bird, pipes, running, score;
+let gameState = "menu";
 let selectedSkin = localStorage.getItem("skin") || "bird";
 
-/* ================= SKINS ================= */
 const skins = ["bird","bat","cat","dog","pig"];
 
 /* ================= RESET ================= */
@@ -107,8 +101,6 @@ function resetGame(){
   bird = { x:90, y:BASE_HEIGHT/2, r:18, vy:0 };
   pipes = [];
   score = 0;
-  phase = 1;
-  speed = CONFIG.baseSpeed;
   running = false;
 
   let x = BASE_WIDTH;
@@ -120,106 +112,79 @@ function resetGame(){
 
 function createPipe(x){
   const top = Math.random()*(BASE_HEIGHT/2 - 80) + 40;
-  return { x, top, bottom: top + CONFIG.gap, passed:false };
+  return { x, top, bottom:top+CONFIG.gap, passed:false };
 }
 
 /* ================= INPUT ================= */
 canvas.addEventListener("click",(e)=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (BASE_WIDTH / canvas.width);
+  const my = (e.clientY - rect.top) * (BASE_HEIGHT / canvas.height);
+
   if(gameState==="menu"){
-    handleMenuClick(e);
+    handleMenuClick(mx,my);
   } else {
     running = true;
     bird.vy = CONFIG.jump;
   }
 });
 
-/* ================= MENU ================= */
-function handleMenuClick(e){
-  const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (BASE_WIDTH / canvas.width);
-  const my = (e.clientY - rect.top) * (BASE_HEIGHT / canvas.height);
-
+function handleMenuClick(mx,my){
   skins.forEach((skin,i)=>{
     const x = 60 + i*60;
     const y = 260;
-    if(mx > x-20 && mx < x+20 && my > y-20 && my < y+20){
+    if(mx>x-22 && mx<x+22 && my>y-22 && my<y+22){
       selectedSkin = skin;
-      localStorage.setItem("skin", skin);
+      localStorage.setItem("skin",skin);
     }
   });
 
-  // botão jogar
-  if(mx > 120 && mx < 240 && my > 340 && my < 380){
-    gameState = "playing";
+  if(mx>120 && mx<240 && my>340 && my<380){
+    gameState="playing";
     resetGame();
   }
 }
 
+/* ================= COLLISION ================= */
+function hit(b,p){
+  if(b.x+b.r>p.x && b.x-b.r<p.x+CONFIG.pipeWidth){
+    if(b.y-b.r<p.top || b.y+b.r>p.bottom){
+      return true;
+    }
+  }
+  return false;
+}
+
 /* ================= DRAW SKINS ================= */
-function drawBird(x,y,rot){
+function drawSkin(type,x,y,rot){
   ctx.save();
   ctx.translate(x,y);
-  ctx.rotate(rot);
-  ctx.fillStyle="#ffeb3b";
-  ctx.beginPath(); ctx.ellipse(0,0,20,16,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#ff9800";
-  ctx.beginPath(); ctx.moveTo(18,-2); ctx.lineTo(30,0); ctx.lineTo(18,6); ctx.fill();
-  ctx.fillStyle="#000";
-  ctx.beginPath(); ctx.arc(6,-5,3,0,Math.PI*2); ctx.fill();
-  ctx.restore();
-}
+  ctx.rotate(rot||0);
 
-function drawBat(x,y,rot){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
-  ctx.fillStyle="#444";
-  ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle="#222";
-  ctx.beginPath(); ctx.moveTo(-20,0); ctx.lineTo(0,-10); ctx.lineTo(20,0); ctx.stroke();
-  ctx.restore();
-}
+  if(type==="bird"){
+    ctx.fillStyle="#ffeb3b";
+    ctx.beginPath(); ctx.ellipse(0,0,20,16,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="#ff9800";
+    ctx.beginPath(); ctx.moveTo(18,-2); ctx.lineTo(30,0); ctx.lineTo(18,6); ctx.fill();
+  }
+  if(type==="bat"){
+    ctx.fillStyle="#444";
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+  }
+  if(type==="cat"){
+    ctx.fillStyle="#ffcc99";
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+  }
+  if(type==="dog"){
+    ctx.fillStyle="#c68642";
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+  }
+  if(type==="pig"){
+    ctx.fillStyle="#ffb6c1";
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+  }
 
-function drawCat(x,y,rot){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
-  ctx.fillStyle="#ffcc99";
-  ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(-10,-14); ctx.lineTo(-4,-22); ctx.lineTo(0,-14); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(10,-14); ctx.lineTo(4,-22); ctx.lineTo(0,-14); ctx.fill();
   ctx.restore();
-}
-
-function drawDog(x,y,rot){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
-  ctx.fillStyle="#c68642";
-  ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
-  ctx.fillRect(-18,-4,6,14);
-  ctx.fillRect(12,-4,6,14);
-  ctx.restore();
-}
-
-function drawPig(x,y,rot){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.rotate(rot);
-  ctx.fillStyle="#ffb6c1";
-  ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#ff8da1";
-  ctx.beginPath(); ctx.ellipse(0,4,6,4,0,0,Math.PI*2); ctx.fill();
-  ctx.restore();
-}
-
-function drawPlayer(){
-  const r = bird.vy/10;
-  if(selectedSkin==="bird") drawBird(bird.x,bird.y,r);
-  if(selectedSkin==="bat") drawBat(bird.x,bird.y,r);
-  if(selectedSkin==="cat") drawCat(bird.x,bird.y,r);
-  if(selectedSkin==="dog") drawDog(bird.x,bird.y,r);
-  if(selectedSkin==="pig") drawPig(bird.x,bird.y,r);
 }
 
 /* ================= UPDATE ================= */
@@ -230,16 +195,27 @@ function update(){
   bird.y += bird.vy;
 
   for(const p of pipes){
-    p.x -= speed;
-    if(p.x < -CONFIG.pipeWidth){
-      const lastX = pipes[pipes.length-1].x;
-      pipes.shift();
-      pipes.push(createPipe(lastX + CONFIG.spacing));
+    p.x -= CONFIG.speed;
+
+    if(!p.passed && p.x+CONFIG.pipeWidth<bird.x){
+      p.passed=true;
+      score++;
+    }
+
+    if(hit(bird,p)){
+      gameState="menu";
+      return;
     }
   }
 
-  if(bird.y < 0 || bird.y > BASE_HEIGHT){
-    gameState = "menu";
+  if(bird.y<0 || bird.y>BASE_HEIGHT){
+    gameState="menu";
+  }
+
+  if(pipes[0].x<-CONFIG.pipeWidth){
+    const lastX=pipes[pipes.length-1].x;
+    pipes.shift();
+    pipes.push(createPipe(lastX+CONFIG.spacing));
   }
 }
 
@@ -248,23 +224,17 @@ function draw(){
   ctx.clearRect(0,0,BASE_WIDTH,BASE_HEIGHT);
 
   if(gameState==="menu"){
-    ctx.fillStyle="#fff";
-    ctx.font="24px Arial";
+    ctx.fillStyle="#000";
+    ctx.font="22px Arial";
     ctx.fillText("Escolha seu personagem",40,120);
 
     skins.forEach((skin,i)=>{
-      const x = 60 + i*60;
-      const y = 260;
+      const x=60+i*60, y=260;
       ctx.strokeStyle = skin===selectedSkin ? "#00f" : "#000";
       ctx.strokeRect(x-22,y-22,44,44);
-      bird={x,y};
-      selectedSkin=skin;
-      drawPlayer();
+      drawSkin(skin,x,y,0);
     });
 
-    selectedSkin = localStorage.getItem("skin") || "bird";
-
-    ctx.fillStyle="#000";
     ctx.fillRect(120,340,120,40);
     ctx.fillStyle="#fff";
     ctx.fillText("JOGAR",150,368);
@@ -277,9 +247,8 @@ function draw(){
     ctx.fillRect(p.x,p.bottom,CONFIG.pipeWidth,BASE_HEIGHT-p.bottom);
   }
 
-  drawPlayer();
+  drawSkin(selectedSkin,bird.x,bird.y,bird.vy/10);
 
-  // HUD
   ctx.fillStyle="#000";
   ctx.font="16px Arial";
   ctx.fillText("Score: "+score,10,20);
