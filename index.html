@@ -9,7 +9,7 @@
 html,body{
   margin:0;
   padding:0;
-  background:#000;
+  background:#111;
   font-family:Arial,Helvetica,sans-serif;
 }
 #gameContainer{
@@ -48,36 +48,29 @@ canvas{
 
 <script>
 /* ===== BASE ===== */
-const BASE_W = 360;
-const BASE_H = 520;
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const BASE_W=360, BASE_H=520;
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
 
 /* RESIZE */
-function resizeCanvas(){
-  const scale = Math.min(
-    window.innerWidth / BASE_W,
-    window.innerHeight / BASE_H
-  );
-  canvas.width = BASE_W * scale;
-  canvas.height = BASE_H * scale;
-  ctx.setTransform(scale,0,0,scale,0,0);
+function resize(){
+  const s=Math.min(innerWidth/BASE_W, innerHeight/BASE_H);
+  canvas.width=BASE_W*s;
+  canvas.height=BASE_H*s;
+  ctx.setTransform(s,0,0,s,0,0);
 }
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
-document.addEventListener("fullscreenchange", resizeCanvas);
+resize();
+addEventListener("resize",resize);
+addEventListener("fullscreenchange",resize);
 
 /* FULLSCREEN */
-document.getElementById("fullscreenBtn").onclick = ()=>{
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
+fullscreenBtn.onclick=()=>{
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
 };
 
 /* ===== CONFIG ===== */
-const CFG = {
+const CFG={
   gravity:0.35,
   jump:-8,
   baseSpeed:2.2,
@@ -88,124 +81,128 @@ const CFG = {
 };
 
 /* ===== STATE ===== */
-let bird, pipes, running, score;
-let animTime=0;
-let gameState="menu";
-let selectedSkin = localStorage.getItem("skin") || "bird";
+let bird,pipes,score,running=false;
+let anim=0;
+let gameState="play";
 
-/* ===== FASES / CENÁRIOS ===== */
-const scenes = [
-  "#70c5ce", // dia
-  "#ffcc80", // tarde
-  "#3f51b5", // noite
-  "#263238", // cidade escura
-  "#4caf50", // floresta
-  "#9c27b0"  // fantasia
+/* ===== CENÁRIOS ===== */
+const scenes=[
+  "#70c5ce","#ffcc80","#3f51b5",
+  "#263238","#4caf50","#9c27b0"
 ];
 
 /* ===== RESET ===== */
-function resetGame(){
+function reset(){
   bird={x:90,y:BASE_H/2,r:18,vy:0};
   pipes=[];
   score=0;
   running=false;
-
   let x=BASE_W;
   for(let i=0;i<CFG.pool;i++){
-    pipes.push(createPipe(x));
+    pipes.push(pipe(x));
     x+=CFG.spacing;
   }
 }
-
-function createPipe(x){
+function pipe(x){
   const top=Math.random()*(BASE_H/2-80)+40;
   return{x,top,bottom:top+CFG.gap,passed:false};
 }
 
-/* ===== INPUT ===== */
-canvas.addEventListener("click",()=>{
-  if(!running){
-    running=true;
-    bird.vy=CFG.jump;
-  }else{
-    bird.vy=CFG.jump;
-  }
-});
+/* INPUT */
+canvas.onclick=()=>{
+  running=true;
+  bird.vy=CFG.jump;
+};
 
-/* ===== COLLISION ===== */
+/* COLLISION */
 function hit(b,p){
   return b.x+b.r>p.x && b.x-b.r<p.x+CFG.pipeW &&
     (b.y-b.r<p.top || b.y+b.r>p.bottom);
 }
 
-/* ===== DRAW PLAYER (simples) ===== */
-function drawPlayer(){
+/* DRAW PLAYER (ANIMADO) */
+function drawBird(){
   ctx.save();
   ctx.translate(bird.x,bird.y);
   ctx.rotate(bird.vy/10);
+
+  const wing=Math.sin(anim*8)*6;
+
   ctx.fillStyle="#ffeb3b";
   ctx.beginPath();
   ctx.ellipse(0,0,20,16,0,0,Math.PI*2);
   ctx.fill();
+
+  ctx.save();
+  ctx.rotate(wing*0.02);
+  ctx.fillStyle="#fdd835";
+  ctx.beginPath();
+  ctx.ellipse(-6,4,8,6,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle="#ff9800";
+  ctx.beginPath();
+  ctx.moveTo(18,-2);ctx.lineTo(30,0);ctx.lineTo(18,6);
+  ctx.fill();
+
+  ctx.fillStyle="#000";
+  ctx.beginPath();
+  ctx.arc(6,-5,3,0,Math.PI*2);
+  ctx.fill();
+
   ctx.restore();
 }
 
-/* ===== UPDATE ===== */
+/* UPDATE */
 function update(){
-  animTime+=0.1;
+  anim+=0.12;
   if(!running) return;
 
   bird.vy+=CFG.gravity;
   bird.y+=bird.vy;
 
   const fase=Math.floor(score/10);
-  const speed=CFG.baseSpeed + fase*0.3;
-  canvas.style.background = scenes[fase % scenes.length];
+  const speed=CFG.baseSpeed+fase*0.3;
 
   for(const p of pipes){
     p.x-=speed;
-
     if(!p.passed && p.x+CFG.pipeW<bird.x){
       p.passed=true;
       score++;
     }
-
-    if(hit(bird,p)){
-      endGame();
-      return;
-    }
+    if(hit(bird,p)){gameOver();return;}
   }
 
-  if(bird.y<0 || bird.y>BASE_H){
-    endGame();
-  }
+  if(bird.y<0||bird.y>BASE_H) gameOver();
 
   if(pipes[0].x<-CFG.pipeW){
-    const last=pipes[pipes.length-1].x;
+    const last=pipes.at(-1).x;
     pipes.shift();
-    pipes.push(createPipe(last+CFG.spacing));
+    pipes.push(pipe(last+CFG.spacing));
   }
 }
 
-/* ===== GAME OVER + RANKING ===== */
-function endGame(){
+/* GAME OVER */
+function gameOver(){
   running=false;
-
   if(score>=20){
-    const name=prompt("Parabéns! Digite seu nome:");
+    const name=prompt("Você fez "+score+" pontos! Nome:");
     if(name){
-      const ranking=JSON.parse(localStorage.getItem("ranking")||"[]");
-      ranking.push({name,score});
-      ranking.sort((a,b)=>b.score-a.score);
-      localStorage.setItem("ranking",JSON.stringify(ranking.slice(0,5)));
+      const r=JSON.parse(localStorage.getItem("ranking")||"[]");
+      r.push({name,score});
+      r.sort((a,b)=>b.score-a.score);
+      localStorage.setItem("ranking",JSON.stringify(r.slice(0,5)));
     }
   }
-  resetGame();
+  reset();
 }
 
-/* ===== DRAW ===== */
+/* DRAW */
 function draw(){
-  ctx.clearRect(0,0,BASE_W,BASE_H);
+  const fase=Math.floor(score/10);
+  ctx.fillStyle=scenes[fase%scenes.length];
+  ctx.fillRect(0,0,BASE_W,BASE_H);
 
   ctx.fillStyle="#3fa34b";
   for(const p of pipes){
@@ -213,20 +210,20 @@ function draw(){
     ctx.fillRect(p.x,p.bottom,CFG.pipeW,BASE_H-p.bottom);
   }
 
-  drawPlayer();
+  drawBird();
 
   ctx.fillStyle="#000";
   ctx.font="16px Arial";
   ctx.fillText("Score: "+score,10,20);
 }
 
-/* ===== LOOP ===== */
+/* LOOP */
 function loop(){
   update();
   draw();
   requestAnimationFrame(loop);
 }
-resetGame();
+reset();
 loop();
 </script>
 
