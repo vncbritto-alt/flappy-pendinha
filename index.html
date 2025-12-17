@@ -19,6 +19,7 @@ html,body{
   margin:20px auto;
 }
 
+/* CANVAS */
 canvas{
   width:100%;
   height:auto;
@@ -28,6 +29,7 @@ canvas{
   display:block;
 }
 
+/* FULLSCREEN */
 #fullscreenBtn{
   position:absolute;
   top:10px;
@@ -42,13 +44,18 @@ canvas{
   font-size:18px;
 }
 
-/* HUD */
+/* HUD (AGORA FUNCIONA) */
 #hud{
-  display:flex;
-  justify-content:space-between;
-  margin-top:10px;
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:20;
+  background:rgba(255,255,255,.75);
+  padding:6px 10px;
+  border-radius:6px;
   font-weight:bold;
   color:#053033;
+  font-size:14px;
 }
 </style>
 </head>
@@ -57,16 +64,17 @@ canvas{
 
 <div id="gameContainer">
   <button id="fullscreenBtn">⛶</button>
-  <canvas id="game" width="360" height="520"></canvas>
 
   <div id="hud">
-    <div>Pontos: <span id="score">0</span></div>
-    <div>Fase: <span id="phase">1</span>/30</div>
+    Pontos: <span id="score">0</span><br>
+    Fase: <span id="phase">1</span>/30
   </div>
+
+  <canvas id="game" width="360" height="520"></canvas>
 </div>
 
 <script>
-/* ================= CONFIG ================= */
+/* CONFIG */
 const CONFIG = {
   gravity: 0.35,
   jump: -8,
@@ -78,7 +86,6 @@ const CONFIG = {
   pointsPerPhase: 20,
   maxPhases: 30
 };
-/* ========================================= */
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -101,11 +108,11 @@ let bird, pipes, running, score, phase, speed;
 
 /* BACKGROUNDS DAS FASES */
 const backgrounds = Array.from({length: CONFIG.maxPhases}, (_,i)=>{
-  const hue = (i * 360 / CONFIG.maxPhases) | 0;
+  const hue = Math.floor(i * 360 / CONFIG.maxPhases);
   return `hsl(${hue}, 70%, 70%)`;
 });
 
-/* RESET TOTAL */
+/* RESET */
 function resetGame(){
   bird = { x:90, y:H/2, r:18, vy:0 };
   pipes = [];
@@ -189,7 +196,6 @@ function update(){
       score++;
       elScore.textContent = score;
 
-      /* CHECA FASE */
       const newPhase = Math.min(
         Math.floor(score / CONFIG.pointsPerPhase) + 1,
         CONFIG.maxPhases
@@ -211,7 +217,6 @@ function update(){
 
   if(bird.y < 0 || bird.y > H){
     resetGame();
-    return;
   }
 
   if(pipes[0].x < -CONFIG.pipeWidth){
