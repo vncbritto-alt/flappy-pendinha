@@ -119,6 +119,7 @@ function resetGame(){
     x += CFG.spacing;
   }
 }
+
 function createPipe(x){
   const top = Math.random()*(BASE_H/2 - 80) + 40;
   return { x, top, bottom: top + CFG.gap, passed:false };
@@ -169,7 +170,7 @@ function hit(b,p){
          (b.y-b.r<p.top || b.y+b.r>p.bottom);
 }
 
-/* ================= DESENHO SKIN ================= */
+/* ================= DESENHO DAS SKINS ================= */
 function drawSkin(type,x,y,rot){
   const t = animTime;
   ctx.save();
@@ -205,11 +206,27 @@ function drawSkin(type,x,y,rot){
   ctx.restore();
 }
 
+/* ================= FUNDO ================= */
+function drawBackground(){
+  const fase = Math.floor(score / 10);
+  ctx.fillStyle = scenes[fase % scenes.length];
+  ctx.fillRect(0,0,BASE_W,BASE_H);
+
+  // Nuvens
+  ctx.fillStyle="rgba(255,255,255,0.8)";
+  clouds.forEach(c=>{
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,c.size,0,Math.PI*2);
+    ctx.arc(c.x+c.size,c.y+5,c.size*0.8,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
 /* ================= UPDATE ================= */
 function update(){
   animTime += 0.15;
 
-  // mover nuvens (sempre)
+  // mover nuvens sempre
   clouds.forEach(c=>{
     c.x -= c.speed;
     if(c.x < -c.size*2){
@@ -225,7 +242,6 @@ function update(){
 
   const fase = Math.floor(score/10);
   const speed = CFG.baseSpeed + fase*0.3;
-  canvas.style.background = scenes[fase % scenes.length];
 
   for(const p of pipes){
     p.x -= speed;
@@ -241,7 +257,7 @@ function update(){
     }
   }
 
-  if(bird.y<0 || bird.y>BASE_H){
+  if(bird.y < 0 || bird.y > BASE_H){
     endGame();
   }
 
@@ -262,7 +278,7 @@ function endGame(){
       const ranking = JSON.parse(localStorage.getItem("ranking") || "[]");
       ranking.push({name, score});
       ranking.sort((a,b)=>b.score-a.score);
-      localStorage.setItem("ranking", ranking.slice(0,5));
+      localStorage.setItem("ranking", JSON.stringify(ranking.slice(0,5)));
     }
   }
   gameState="menu";
@@ -270,24 +286,51 @@ function endGame(){
 
 /* ================= DRAW ================= */
 function draw(){
-  ctx.clearRect(0,0,BASE_W,BASE_H);
-
-  // FUNDO — nuvens
-  ctx.fillStyle="rgba(255,255,255,0.8)";
-  clouds.forEach(c=>{
-    ctx.beginPath();
-    ctx.arc(c.x,c.y,c.size,0,Math.PI*2);
-    ctx.arc(c.x+c.size,c.y+5,c.size*0.8,0,Math.PI*2);
-    ctx.fill();
-  });
+  drawBackground();
 
   if(gameState==="menu"){
     ctx.fillStyle="#fff";
     ctx.font="22px Arial";
     ctx.fillText("Escolha seu personagem",40,120);
+
+    skins.forEach((s,i)=>{
+      const x=40+i*40, y=260;
+      ctx.strokeStyle = s===selectedSkin ? "#00f" : "#fff";
+      ctx.strokeRect(x-18,y-18,36,36);
+      drawSkin(s,x,y,0);
+    });
+
+    ctx.fillStyle="#fff";
+    ctx.fillRect(120,340,120,40);
+    ctx.fillRect(120,390,120,40);
+
+    ctx.fillStyle="#000";
+    ctx.fillText("JOGAR",150,368);
+    ctx.fillText("RANKING",138,418);
     return;
   }
 
+  if(gameState==="leaderboard"){
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,BASE_W,BASE_H);
+
+    ctx.fillStyle="#fff";
+    ctx.font="22px Arial";
+    ctx.fillText("🏆 LEADERBOARD",80,80);
+
+    const r=JSON.parse(localStorage.getItem("ranking")||"[]");
+    ctx.font="16px Arial";
+    r.forEach((e,i)=>{
+      ctx.fillText(`${i+1}. ${e.name} - ${e.score}`,80,130+i*30);
+    });
+
+    ctx.fillRect(120,420,120,40);
+    ctx.fillStyle="#000";
+    ctx.fillText("VOLTAR",150,448);
+    return;
+  }
+
+  // JOGO
   ctx.fillStyle="#3fa34b";
   for(const p of pipes){
     ctx.fillRect(p.x,0,CFG.pipeW,p.top);
