@@ -28,6 +28,7 @@ canvas {
   height: auto;
   display: block;
   border-radius: 12px;
+  background: #70c5ce;
 }
 
 #fullscreenBtn {
@@ -42,6 +43,19 @@ canvas {
   padding: 6px 10px;
   cursor: pointer;
   font-size: 18px;
+}
+
+/* ============================================================
+   ====================== UI / TEXTO ==========================
+   ============================================================ */
+
+.uiOverlay {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 15;
+  color: white;
+  font-size: 16px;
 }
 </style>
 </head>
@@ -77,8 +91,28 @@ const SCENE_COLORS = [
   "#3f51b5",
   "#263238",
   "#4caf50",
-  "#9c27b0"
+  "#9c27b0",
+  "#1e88e5",
+  "#6d4c41"
 ];
+
+/* ============================================================
+   ====================== SISTEMA DE SOM ======================
+   ============================================================ */
+/* (implementação completa continua na PARTE 2) */
+
+const SOUND_CONFIG = {
+  enabled: true,
+  volumeEffects: 0.6,
+  volumeMusic: 0.4
+};
+
+const sounds = {
+  jump: new Audio("sounds/jump.mp3"),
+  score: new Audio("sounds/score.mp3"),
+  hit: new Audio("sounds/hit.mp3"),
+  music: new Audio("sounds/music.mp3")
+};
 
 /* ============================================================
    ====================== CANVAS BASE =========================
@@ -87,6 +121,7 @@ const SCENE_COLORS = [
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+/* ---------- Resize Responsivo ---------- */
 function resizeCanvas() {
   const scale = Math.min(
     window.innerWidth / BASE_WIDTH,
@@ -153,7 +188,8 @@ function initParallax() {
   parallaxMid = [];
   parallaxNear = [];
 
-  for (let i = 0; i < 4; i++) {
+  // Camada distante
+  for (let i = 0; i < 5; i++) {
     parallaxFar.push({
       x: Math.random() * BASE_WIDTH,
       y: 40 + Math.random() * 120,
@@ -162,7 +198,8 @@ function initParallax() {
     });
   }
 
-  for (let i = 0; i < 5; i++) {
+  // Camada média
+  for (let i = 0; i < 6; i++) {
     parallaxMid.push({
       x: Math.random() * BASE_WIDTH,
       y: 80 + Math.random() * 160,
@@ -171,7 +208,8 @@ function initParallax() {
     });
   }
 
-  for (let i = 0; i < 6; i++) {
+  // Camada próxima
+  for (let i = 0; i < 7; i++) {
     parallaxNear.push({
       x: Math.random() * BASE_WIDTH,
       y: 120 + Math.random() * 200,
@@ -184,7 +222,7 @@ function initParallax() {
 initParallax();
 
 /* ============================================================
-   ====================== RESET JOGO ==========================
+   ====================== RESET DO JOGO =======================
    ============================================================ */
 
 function resetGame() {
@@ -246,8 +284,13 @@ canvas.addEventListener("click", event => {
   bird.velocity = GAME_CONFIG.jumpForce;
 });
 
+/* ============================================================
+   ====================== MENU ================================
+   ============================================================ */
+
 function handleMenuClick(mx, my) {
 
+  // Seleção de skins
   SKINS.forEach((skin, index) => {
     const x = 40 + index * 40;
     const y = 260;
@@ -261,11 +304,13 @@ function handleMenuClick(mx, my) {
     }
   });
 
+  // Botão jogar
   if (mx > 120 && mx < 240 && my > 340 && my < 380) {
     gameState = "playing";
     resetGame();
   }
 
+  // Botão ranking
   if (mx > 120 && mx < 240 && my > 390 && my < 430) {
     gameState = "leaderboard";
   }
@@ -290,9 +335,8 @@ function checkCollision(bird, pipe) {
   }
   return false;
 }
-
 /* ============================================================
-   ====================== DESENHO SKINS =======================
+   ====================== DESENHO DAS SKINS ===================
    ============================================================ */
 
 function drawSkin(type, x, y, rotation) {
@@ -425,6 +469,7 @@ function update() {
 
   animationTime += 0.15;
 
+  // Parallax
   parallaxFar.forEach(e => {
     e.x -= e.speed;
     if (e.x < -e.radius * 2) e.x = BASE_WIDTH + e.radius * 2;
@@ -455,6 +500,12 @@ function update() {
     if (!pipe.passed && pipe.x + GAME_CONFIG.pipeWidth < bird.x) {
       pipe.passed = true;
       score++;
+
+      // Som de ponto
+      if (sounds.score) {
+        sounds.score.currentTime = 0;
+        sounds.score.play().catch(()=>{});
+      }
     }
 
     if (checkCollision(bird, pipe)) {
@@ -481,9 +532,19 @@ function endGame() {
 
   running = false;
 
+  if (sounds.hit) {
+    sounds.hit.currentTime = 0;
+    sounds.hit.play().catch(()=>{});
+  }
+
+  if (sounds.music) {
+    sounds.music.pause();
+    sounds.music.currentTime = 0;
+  }
+
   if (score >= 20) {
 
-    const name = prompt("Digite seu nome:");
+    const name = prompt("Digite seu nome para o ranking:");
 
     if (name) {
       const ranking = JSON.parse(localStorage.getItem("ranking") || "[]");
@@ -605,7 +666,7 @@ function gameLoop() {
 }
 
 gameLoop();
-</script>
 
+</script>
 </body>
 </html>
