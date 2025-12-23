@@ -31,10 +31,10 @@ canvas {
   background: #70c5ce;
 }
 
-#fullscreenBtn {
+#fullscreenBtn,
+#soundBtn {
   position: absolute;
   top: 10px;
-  right: 10px;
   z-index: 20;
   background: rgba(0,0,0,0.6);
   color: white;
@@ -44,6 +44,9 @@ canvas {
   cursor: pointer;
   font-size: 18px;
 }
+
+#fullscreenBtn { right: 10px; }
+#soundBtn { right: 52px; }
 
 /* ============================================================
    ====================== UI / TEXTO ==========================
@@ -64,6 +67,7 @@ canvas {
 
 <div id="gameContainer">
   <button id="fullscreenBtn">⛶</button>
+  <button id="soundBtn">🔊</button>
   <canvas id="game"></canvas>
 </div>
 
@@ -99,7 +103,6 @@ const SCENE_COLORS = [
 /* ============================================================
    ====================== SISTEMA DE SOM ======================
    ============================================================ */
-/* (implementação completa continua na PARTE 2) */
 
 const SOUND_CONFIG = {
   enabled: true,
@@ -114,6 +117,50 @@ const sounds = {
   music: new Audio("sounds/music.mp3")
 };
 
+sounds.music.loop = true;
+sounds.music.volume = SOUND_CONFIG.volumeMusic;
+sounds.jump.volume  = SOUND_CONFIG.volumeEffects;
+sounds.score.volume = SOUND_CONFIG.volumeEffects;
+sounds.hit.volume   = SOUND_CONFIG.volumeEffects;
+
+/* ---------- Desbloqueio de áudio (exigência do navegador) ---------- */
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+
+  Object.values(sounds).forEach(sound => {
+    try {
+      sound.play().then(() => {
+        sound.pause();
+        sound.currentTime = 0;
+      }).catch(()=>{});
+    } catch(e){}
+  });
+
+  audioUnlocked = true;
+}
+
+/* ---------- Controle de som ---------- */
+const soundBtn = document.getElementById("soundBtn");
+
+soundBtn.onclick = () => {
+  SOUND_CONFIG.enabled = !SOUND_CONFIG.enabled;
+  soundBtn.textContent = SOUND_CONFIG.enabled ? "🔊" : "🔇";
+
+  if (!SOUND_CONFIG.enabled) {
+    sounds.music.pause();
+  }
+};
+
+function playSound(name) {
+  if (!SOUND_CONFIG.enabled) return;
+  if (!sounds[name]) return;
+
+  sounds[name].currentTime = 0;
+  sounds[name].play().catch(()=>{});
+}
+
 /* ============================================================
    ====================== CANVAS BASE =========================
    ============================================================ */
@@ -121,7 +168,6 @@ const sounds = {
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-/* ---------- Resize Responsivo ---------- */
 function resizeCanvas() {
   const scale = Math.min(
     window.innerWidth / BASE_WIDTH,
@@ -188,7 +234,6 @@ function initParallax() {
   parallaxMid = [];
   parallaxNear = [];
 
-  // Camada distante
   for (let i = 0; i < 5; i++) {
     parallaxFar.push({
       x: Math.random() * BASE_WIDTH,
@@ -198,7 +243,6 @@ function initParallax() {
     });
   }
 
-  // Camada média
   for (let i = 0; i < 6; i++) {
     parallaxMid.push({
       x: Math.random() * BASE_WIDTH,
@@ -208,7 +252,6 @@ function initParallax() {
     });
   }
 
-  // Camada próxima
   for (let i = 0; i < 7; i++) {
     parallaxNear.push({
       x: Math.random() * BASE_WIDTH,
@@ -247,7 +290,6 @@ function resetGame() {
 }
 
 function createPipe(x) {
-
   const topHeight = Math.random() * (BASE_HEIGHT / 2 - 80) + 40;
 
   return {
@@ -257,12 +299,13 @@ function createPipe(x) {
     passed: false
   };
 }
-
 /* ============================================================
    ====================== INPUT ===============================
    ============================================================ */
 
 canvas.addEventListener("click", event => {
+
+  unlockAudio(); // desbloqueia áudio no primeiro clique
 
   const rect = canvas.getBoundingClientRect();
   const mx = (event.clientX - rect.left) * (BASE_WIDTH / canvas.width);
@@ -280,6 +323,7 @@ canvas.addEventListener("click", event => {
     return;
   }
 
+  playSound("jump");
   running = true;
   bird.velocity = GAME_CONFIG.jumpForce;
 });
@@ -308,6 +352,10 @@ function handleMenuClick(mx, my) {
   if (mx > 120 && mx < 240 && my > 340 && my < 380) {
     gameState = "playing";
     resetGame();
+    if (SOUND_CONFIG.enabled) {
+      sounds.music.currentTime = 0;
+      sounds.music.play().catch(()=>{});
+    }
   }
 
   // Botão ranking
@@ -335,6 +383,7 @@ function checkCollision(bird, pipe) {
   }
   return false;
 }
+
 /* ============================================================
    ====================== DESENHO DAS SKINS ===================
    ============================================================ */
@@ -500,12 +549,7 @@ function update() {
     if (!pipe.passed && pipe.x + GAME_CONFIG.pipeWidth < bird.x) {
       pipe.passed = true;
       score++;
-
-      // Som de ponto
-      if (sounds.score) {
-        sounds.score.currentTime = 0;
-        sounds.score.play().catch(()=>{});
-      }
+      playSound("score");
     }
 
     if (checkCollision(bird, pipe)) {
@@ -531,16 +575,10 @@ function update() {
 function endGame() {
 
   running = false;
+  playSound("hit");
 
-  if (sounds.hit) {
-    sounds.hit.currentTime = 0;
-    sounds.hit.play().catch(()=>{});
-  }
-
-  if (sounds.music) {
-    sounds.music.pause();
-    sounds.music.currentTime = 0;
-  }
+  sounds.music.pause();
+  sounds.music.currentTime = 0;
 
   if (score >= 20) {
 
@@ -640,14 +678,17 @@ function draw() {
     return;
   }
 
+  // Obstáculos
   ctx.fillStyle = "#3fa34b";
   pipes.forEach(pipe => {
     ctx.fillRect(pipe.x, 0, GAME_CONFIG.pipeWidth, pipe.top);
     ctx.fillRect(pipe.x, pipe.bottom, GAME_CONFIG.pipeWidth, BASE_HEIGHT - pipe.bottom);
   });
 
+  // Personagem
   drawSkin(selectedSkin, bird.x, bird.y, bird.velocity / 10);
 
+  // Score
   ctx.fillStyle = "#fff";
   ctx.font = "16px Arial";
   ctx.fillText("Score: " + score, 10, 20);
@@ -666,7 +707,6 @@ function gameLoop() {
 }
 
 gameLoop();
-
 </script>
 </body>
 </html>
